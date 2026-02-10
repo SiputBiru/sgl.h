@@ -2,7 +2,7 @@
 
 A single-header C99 library for SDL3 that implements a "Vertex Pulling" rendering backend.
 
-I wrote this to test the concepts from Mason Ramali's "It's Not About The API" talk. It abstracts the verbose SDL3 GPU API into a simple immediate-mode style API (similar to Raylib) but uses modern bindless techniques under the hood.
+I wrote this to test the concepts from Mason Ramali's "It's Not About The API" talk [link](https://www.youtube.com/watch?v=7bSzp-QildA). It abstracts the verbose SDL3 GPU API into a simple immediate-mode style API (similar to Raylib) but uses modern bindless techniques under the hood.
 
 ## How it works
 
