@@ -18,6 +18,14 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
+    SDL_Log("Header Version: %d", SDL_VERSION);
+    SDL_Log("Linked Version: %d", SDL_GetVersion());
+
+    if (SDL_VERSION != SDL_GetVersion()) {
+        SDL_Log(
+            "CRITICAL ERROR: SDL3 Header/Library mismatch! Reinstall SDL3.");
+    }
+
     SDL_GPUDevice *device =
         SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
     if (!device) {
