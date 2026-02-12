@@ -11,15 +11,15 @@ layout(set = 0, binding = 0, std430) readonly buffer InstanceBuffer {
 
 layout(set = 1, binding = 0, std140) uniform UniformBlock {
     vec2 ScreenSize;
-    uint BaseOffset;
     uint _pad;
 } uniforms;
+
 
 layout(location = 0) out vec4 v_Color;
 
 void main()
 {
-    InstanceData data = storage.instances[gl_InstanceIndex + uniforms.BaseOffset];
+    InstanceData data = storage.instances[gl_InstanceIndex ];
 
     vec2 corner = vec2(
       (gl_VertexIndex == 2 || gl_VertexIndex == 3 || gl_VertexIndex == 5),
