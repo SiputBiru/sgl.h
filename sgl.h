@@ -467,7 +467,7 @@ static const uint8_t shaders_default_vert_spv[] = {
     0xa9, 0x00, 0x00, 0x00, 0xab, 0x00, 0x00, 0x00, 0xad, 0x00, 0x00, 0x00,
     0x3e, 0x00, 0x03, 0x00, 0xa5, 0x00, 0x00, 0x00, 0xae, 0x00, 0x00, 0x00,
     0xfd, 0x00, 0x01, 0x00, 0x38, 0x00, 0x01, 0x00};
-unsigned int shaders_default_vert_spv_len = 4940;
+static const unsigned int shaders_default_vert_spv_len = 4940;
 
 // Fragment Shader
 static const uint8_t shaders_default_frag_spv[] = {
@@ -509,7 +509,7 @@ static const uint8_t shaders_default_frag_spv[] = {
     0x07, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x00,
     0x3e, 0x00, 0x03, 0x00, 0x09, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x00,
     0xfd, 0x00, 0x01, 0x00, 0x38, 0x00, 0x01, 0x00};
-unsigned int shaders_default_frag_spv_len = 452;
+static const unsigned int shaders_default_frag_spv_len = 452;
 
 static struct {
     SDL_GPUDevice *device;
@@ -592,7 +592,6 @@ SDL_GPUShader *sgl_LoadShader(const char *filename, SDL_GPUShaderStage stage,
 SDL_GPUGraphicsPipeline *sgl_CreatePipeline(SDL_GPUShader *vert,
                                             SDL_GPUShader *frag) {
 
-    // Clean C99 Initialization (No SDL_zero needed)
     SDL_GPUColorTargetDescription targetDesc = {
         .format = SDL_GetGPUSwapchainTextureFormat(sgl.device, sgl.window),
         .blend_state = {
@@ -664,7 +663,8 @@ void sgl_InitWindow(int w, int h, const char *title) {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window *win = SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE);
 
-    // Initialize GPU with standard SPIR-V format support
+    // Initialize GPU with standard SPIR-V format support, this makes SDL3 will
+    // be using Vulkan By default
     SDL_GPUDevice *dev =
         SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
 
