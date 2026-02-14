@@ -16,7 +16,7 @@ typedef float f32;
 
 typedef struct {
     uint8_t r, g, b, a;
-} SGL_Color;
+} SGL_COLOR;
 
 // -- API --
 void sgl_InitWindow(int w, int h, const char *title);
@@ -35,7 +35,7 @@ SDL_GPUGraphicsPipeline *sgl_GetDefaultPipeline(void);
 // Drawing
 void sgl_Begin(void);
 void sgl_End(void);
-void sgl_DrawRectangle(f32 x, f32 y, f32 w, f32 h, SGL_Color color);
+void sgl_DrawRectangle(f32 x, f32 y, f32 w, f32 h, SGL_COLOR color);
 
 #endif // SGL_H
 
@@ -220,7 +220,7 @@ void sgl_Begin() {
         sgl.device, sgl.transferBuffer, true);
 }
 
-void sgl_DrawRectangle(f32 x, f32 y, f32 w, f32 h, SGL_Color color) {
+void sgl_DrawRectangle(f32 x, f32 y, f32 w, f32 h, SGL_COLOR color) {
     if (sgl.instanceCount >= SGL_MAX_INSTANCES)
         return;
 

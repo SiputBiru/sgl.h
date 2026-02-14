@@ -34,7 +34,10 @@ int main(int argc, char **argv) {
         // -----------------------------------------------------
         sgl_SetPipeline(sgl_GetDefaultPipeline()); // Or just pass NULL
         sgl_DrawRectangle(10, 10, 100, 100,
-                          (SGL_Color){0, 255, 0, 255}); // Green
+                          (SGL_COLOR){0, 255, 0, 255}); // Green
+        float time = SDL_GetTicks() / 1000.0f;
+        sgl_DrawRectangle(600 + SDL_sinf(time) * 100, 300, 50, 50,
+                          (SGL_COLOR){0, 0, 255, 255});
 
         // -----------------------------------------------------
         // Scenario B: Use Custom Shader (If you loaded one)
@@ -47,7 +50,7 @@ int main(int argc, char **argv) {
              //  Real batching would require a 'Flush' function here.)
 
              sgl_SetPipeline(myPipeline);
-             sgl_DrawRectangle(200, 10, 100, 100, (SGL_Color){255, 0, 0, 255});
+             sgl_DrawRectangle(200, 10, 100, 100, (SGL_COLOR){255, 0, 0, 255});
         }
         */
 

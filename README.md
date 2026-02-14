@@ -146,8 +146,9 @@ int main(int argc, char* argv[]) {
 
         sgl_Begin();
 
-        sgl_DrawRectangle(100, 100, 200, 200, (SGL_Color){255, 0, 0, 255});
-        sgl_DrawRectangle(350, 100, 200, 200, (SGL_Color){0, 255, 0, 255});
+        // x, y, w, h, colors
+        sgl_DrawRectangle(100, 100, 200, 200, (SGL_COLOR){255, 0, 0, 255});
+        sgl_DrawRectangle(350, 100, 200, 200, (SGL_COLOR){0, 255, 0, 255});
 
         sgl_End();
     }
