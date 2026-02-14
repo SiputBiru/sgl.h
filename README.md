@@ -37,8 +37,12 @@ SDL3 expects SPIR-V resources to be bound in specific sets and bindings. When wr
 
 ### The Shaders
 
-You must use HLSL shaders that read from a `StructuredBuffer`.
+You must use GLSL/HLSL shaders that read from a `StructuredBuffer` if you want to use your own shader.
 Save these in a folder named `shaders/`.
+
+> [!NOTE]
+> **SGL now has embedded default shaders!**
+> No longer need to ship or load a `shaders/` folder. The library works out-of-the-box with a single header file.
 
 #### Vertex Shader (`shaders/default.vert`)
 

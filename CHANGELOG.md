@@ -10,7 +10,7 @@
 #### Added
 
 - **Embedded Shaders:** Default shaders are now compiled into byte arrays (`sgl_default_vert_spv` / `sgl_default_frag_spv`) directly inside `sgl.h`.
-  - *Benefit:* You no longer need to ship or load a separate `shaders/` folder.
+  - *Benefit:* no longer need to ship or load a separate `shaders/` folder.
 - **Logging:** `sgl_InitWindow` now automatically logs the active **Graphics Backend** (Vulkan, Metal, or D3D12) to the console for easier debugging.
 - **Debug Info:** `sgl_LoadShader` now logs the number of Uniform and Storage buffers bound to each shader.
 
