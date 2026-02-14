@@ -1,115 +1,133 @@
 # sgl.h
 
-A single-header C99 library for SDL3 that implements a "Vertex Pulling" rendering backend.
+A single-header C99 library for SDL3 that implements a **"Vertex Pulling"** rendering backend.
 
-I wrote this to test the concepts from Mason Ramali's "It's Not About The API" talk [link](https://www.youtube.com/watch?v=7bSzp-QildA). It abstracts the verbose SDL3 GPU API into a simple immediate-mode style API (similar to Raylib) but uses modern bindless techniques under the hood.
+I wrote this to test the concepts from Mason Ramali's "It's Not About The API" talk. It abstracts the verbose SDL3 GPU API into a simple immediate-mode style API (similar to Raylib) while using modern bindless techniques under the hood.
+
+## Features
+
+- **Single Header:** Drop `sgl.h` into your project.
+- **Vertex Pulling:** Uses Storage Buffers (SSBO) instead of Vertex Buffers.
+- **Backend Agnostic:** Works on Vulkan, Metal, D3D12 (handled by SDL3).
+- **Auto-Logging:** Automatically logs the active **Graphics Backend** and **Shader Resource Counts** to the console on startup.
+- **Clean C99:** Uses designated initializers for readable, zero-overhead pipeline creation.
 
 ## How it works
 
 Instead of binding vertex buffers for every shape, this library:
 
-1. Allocates one massive Storage Buffer (SSBO) on the GPU at startup.
-
-2. Maps a pointer to CPU memory every frame.
-
+1. Allocates one massive **Storage Buffer** on the GPU at startup.
+2. Maps a pointer to CPU memory every frame via a Transfer Buffer.
 3. Writes raw instance data (x, y, color, etc.) linearly to that pointer.
-
 4. Uploads everything in one go at the end of the frame.
+5. Pushes Screen Dimensions via **Uniforms** (Binding 0).
+6. Uses a **Vertex Shader** to generate geometry on the fly using `SV_VertexID`.
 
-5. Uses a Vertex Pulling shader to generate geometry on the fly using `SV_VertexID` and `SV_InstanceID`.
+## SDL3 SPIR-V Resource Mapping
 
-## Dependencies
+SDL3 expects SPIR-V resources to be bound in specific sets and bindings. When writing your own GLSL shaders for `sgl`, use this table:
 
-- **SDL3** (Latest Nightly or built from source). The GPU API is still in flux, so older versions might break.
-
-- **Vulkan SDK** (specifically `glslc`) to compile the shaders.
+| Resource Type | GLSL Keyword | Set (Space) | Binding | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Uniform Buffers** | `uniform` | `set = 0` | `binding = 0` | Used for global data (Screen Size, Time). |
+| **Storage Buffers** | `buffer` | `set = 0` | `binding = 1` | Used for Instance Data (Transforms, Colors). |
+| **Textures** | `uniform sampler2D` | `set = 2` | `binding = 0` | (Future Use) Texture samplers. |
 
 ## Setup
 
-### 1. The Shaders
+### The Shaders
 
-You cannot use standard vertex shaders with this library because it does not send vertex attributes. You must use the following HLSL shaders that read from a StructuredBuffer.
-
+You must use HLSL shaders that read from a `StructuredBuffer`.
 Save these in a folder named `shaders/`.
 
-#### Vertex Shader (`shaders/shader.vert.hlsl`)
+#### Vertex Shader (`shaders/default.vert`)
 
-```High-level shader language
+Note: This shader now accepts the Screen Size via a Uniform buffer (slot `b0`) so it handles window resizing automatically.
+
+```glsl
+#version 450
+
+// Binding 0: Uniforms (Screen Size)
+// std140 ensures memory alignment matches C struct
+layout(std140, set = 0, binding = 0) uniform ScreenUniforms {
+    float screenW;
+    float screenH;
+    float padding1;
+    float padding2;
+};
+
+// Binding 1: Instance Data (Storage Buffer)
+// std430 is standard for SSBOs
 struct InstanceData {
-float4 rect; // x, y, w, h
-float4 color; // r, g, b, a
-// padding handled in C struct
+    vec4 rect;  // x, y, w, h
+    vec4 color; // r, g, b, a
 };
 
-StructuredBuffer<InstanceData> Instances : register(t0, space0);
+layout(std430, set = 0, binding = 1) readonly buffer Instances {
+    InstanceData data[];
+} instances;
 
-struct VSInput {
-uint vertexID : SV_VertexID;
-uint instanceID : SV_InstanceID;
-};
+// Output to Fragment Shader
+layout(location = 0) out vec4 outColor;
 
-struct VSOutput {
-float4 pos : SV_Position;
-float4 color : TEXCOORD0;
-};
+void main() {
+    // Pull Data for this specific instance
+    // In Vulkan GLSL, use gl_InstanceIndex (not gl_InstanceID)
+    InstanceData inst = instances.data[gl_InstanceIndex];
 
-VSOutput main(VSInput input) {
-VSOutput output;
+    // Generate Quad Geometry on the fly (Indices 0..5)
+    vec2 corner;
+    uint idx = gl_VertexIndex % 6; // Use gl_VertexIndex
 
-    // Pull Data
-    InstanceData data = Instances[input.instanceID];
+    // Triangle 1
+    if      (idx == 0) corner = vec2(0.0, 0.0);
+    else if (idx == 1) corner = vec2(0.0, 1.0);
+    else if (idx == 2) corner = vec2(1.0, 0.0);
+    // Triangle 2
+    else if (idx == 3) corner = vec2(1.0, 0.0);
+    else if (idx == 4) corner = vec2(0.0, 1.0);
+    else               corner = vec2(1.0, 1.0);
 
-    // Generate Quad (0..5)
-    float2 corner;
-    uint idx = input.vertexID % 6;
-    if (idx == 0) corner = float2(0, 0);
-    else if (idx == 1) corner = float2(0, 1);
-    else if (idx == 2) corner = float2(1, 0);
-    else if (idx == 3) corner = float2(1, 0);
-    else if (idx == 4) corner = float2(0, 1);
-    else                 corner = float2(1, 1);
+    // Calculate World Position (x + w * corner)
+    vec2 worldPos = inst.rect.xy + (corner * inst.rect.zw);
 
-    // World Position
-    float2 worldPos = data.rect.xy + (corner * data.rect.zw);
+    // Convert to Normalized Device Coordinates (NDC) using Uniforms
+    vec2 ndc;
+    ndc.x = (worldPos.x / screenW) * 2.0 - 1.0;
+    ndc.y = (worldPos.y / screenH) * 2.0 - 1.0; // Y is down in Vulkan
 
-    // NDC Conversion (Assuming 800x600 window)
-    float2 ndc;
-    ndc.x = (worldPos.x / 800.0) * 2.0 - 1.0;
-    ndc.y = -((worldPos.y / 600.0) * 2.0 - 1.0);
-
-    output.pos = float4(ndc, 0.0, 1.0);
-    output.color = data.color;
-    return output;
-
-}
-
-```
-
-#### Fragment Shader (`shaders/shader.frag.hlsl`)
-
-```High-level shader language
-float4 main(float4 pos : SV_Position, float4 color : TEXCOORD0) : SV_Target0 {
-    return color;
+    gl_Position = vec4(ndc, 0.0, 1.0);
+    outColor = inst.color;
 }
 ```
 
-**Compiling Shaders** Run these commands in your terminal to generate the SPIR-V bytecode:
+#### Fragment Shader (`shaders/default.frag`)
 
-```Bash
-glslc -fshader-stage=vertex shaders/shader.vert.hlsl -o shaders/shader.vert.spv
-glslc -fshader-stage=fragment shaders/shader.frag.hlsl -o shaders/shader.frag.spv
+Save this as `shaders/default.frag`
+
+```glsl
+#version 450
+
+layout(location = 0) in vec4 inColor;
+layout(location = 0) out vec4 outFragColor;
+
+void main() {
+    outFragColor = inColor;
+}
 ```
 
-## 2. Implementation
+### Compiling Shader
 
-In exactly one C file (e.g., `main.c`), define the implementation before including the header.
+Since the extensions are now .vert and .frag (standard GLSL extensions), the compilation command is slightly simpler.
 
-```C
-#define SGL_IMPLEMENTATION
-#include "sgl.h"
+```bash
+glslc shaders/default.vert -o shaders/default.vert.spv
+glslc shaders/default.frag -o shaders/default.frag.spv
 ```
 
-### Example Usage
+## Implementation
+
+In exactly one C file (e.g., `main.c`), define `SGL_IMPLEMENTATION` before including the header.
 
 ```C
 #include <SDL3/SDL.h>
@@ -117,16 +135,7 @@ In exactly one C file (e.g., `main.c`), define the implementation before includi
 #include "sgl.h"
 
 int main(int argc, char* argv[]) {
-SDL_Init(SDL_INIT_VIDEO);
-SDL_Window* window = SDL_CreateWindow("SGL Demo", 800, 600, 0);
-
-    // Create GPU Device (Vulkan/SPIR-V backend)
-    SDL_GPUDevice* device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
-
-    // Initialize Library (Loads shaders from disk automatically)
-    if (!sgl_Init(window, device)) {
-        return -1;
-    }
+    sgl_InitWindow(800, 600, "SGL Demo");
 
     bool running = true;
     while (running) {
@@ -135,48 +144,65 @@ SDL_Window* window = SDL_CreateWindow("SGL Demo", 800, 600, 0);
             if (event.type == SDL_EVENT_QUIT) running = false;
         }
 
-        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
-        if (cmd) {
-            sgl_Begin(cmd);
+        sgl_Begin();
 
-            // Draw things (Linear allocation, very fast)
-            sgl_DrawRectangle(100, 100, 200, 200, (SGL_COLOR){255, 0, 0, 255});
-            sgl_DrawRectangle(350, 100, 200, 200, (SGL_COLOR){0, 255, 0, 255});
+        sgl_DrawRectangle(100, 100, 200, 200, (SGL_Color){255, 0, 0, 255});
+        sgl_DrawRectangle(350, 100, 200, 200, (SGL_Color){0, 255, 0, 255});
 
-            sgl_End(window);
-            SDL_SubmitGPUCommandBuffer(cmd);
-        }
+        sgl_End();
     }
 
     sgl_Shutdown();
-    SDL_DestroyWindow(window);
-    SDL_Quit();
     return 0;
 }
+
 ```
 
-## Building
+### Building
 
-Link against SDL3 and the math library.
+Link against SDL3 and the math library
 
-```Bash
-gcc testbed/main.c -o demo -lSDL3 -lm
-./demo
+```bash
+gcc testbed/main.c -o main -lSDL3 -lm
+./main
 ```
 
-## Configuration
+### configuration
 
-You can override the maximum instance count or window size assumptions by defining these before including the header:
+You can override defaults by defining these before including the header:
 
 ```C
-#define SGL_MAX_INSTANCES 50000
-#define SGL_WIN_WIDTH 1920
-#define SGL_WIN_HEIGHT 1080
+#define SGL_MAX_INSTANCES 50000 // Increase max sprites per frame
 #include "sgl.h"
 ```
 
-## Known Issues
+### Logs
 
-The projection matrix is currently hardcoded to 800x600 in the shader.
+now `sgl` will reports:
 
-Only supports SPIR-V (Vulkan) right now. If you want D3D12/Metal, you need to compile the shaders to DXIL/MSL and change the `SDL_CreateGPUDevice` flags.
+- **Graphics Backend**: (e.g., Vulkan, Metal, Direct3D12). but mainly will outputing vulkan cause of the SPIRV assignment in the gpu create device.
+
+```C
+    SDL_GPUDevice *dev =
+        SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
+```
+
+- **Shader Details**: How many Uniform and Storage Buffers are active per shader.
+
+### Known Issues
+
+- Manual Compilation: Shaders must be pre-compiled to SPIR-V using glslc (from the Vulkan SDK). Runtime GLSL compilation is not currently included in SDL3 core.
+
+- Resource Limits: The default instance limit is 10,000 sprites per frame. Increase SGL_MAX_INSTANCES if you see flickering or missing sprites.
+
+- Coordinate System: The default shader assumes (0,0) is Top-Left. If you port shaders from OpenGL, you may need to flip the Y-axis calculation.
+
+## Roadmap
+
+- Implement `sgl_DrawTexture(SDL_Texture* tex, x, y, w, h)`
+
+- Add `sgl_SetCamera(x, y, zoom)` to support scrolling and zooming. (but maybe will not happen).
+
+- **Text Rendering:** Implement a Bitmap Font system where glyphs are treated as textured quads.
+
+- **Z-Ordering:** Add a Depth Buffer (Z-Buffer) pipeline so sprites can be drawn in any order but sorted correctly on the GPU.
