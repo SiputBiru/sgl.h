@@ -639,12 +639,6 @@ bool sgl_InternalInit(SDL_Window *window, SDL_GPUDevice *device) {
     sgl.transferBuffer = SDL_CreateGPUTransferBuffer(device, &tInfo);
 
     // LOAD DEFAULT SHADERS
-    // SDL_GPUShader *v = sgl_LoadShader("shaders/default.vert.spv",
-    //                                   SDL_GPU_SHADERSTAGE_VERTEX, 1, 1);
-    // SDL_GPUShader *f = sgl_LoadShader("shaders/default.frag.spv",
-    //                                   SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
-    // shaders_default_vert_spv
-
     SDL_GPUShader *v = sgl_CreateShaderFromBytes(
         shaders_default_vert_spv, sizeof(shaders_default_vert_spv),
         SDL_GPU_SHADERSTAGE_VERTEX, 1, 1);
