@@ -3,7 +3,7 @@
 ### [Unreleased]
 
 - **Planned:** Texture Rendering support (Bindless).
-- **Planned:** Camera system (View/Projection Matrices). (Almost done!)
+- **Planned:** 3D Primitive Rendering (Cube, Sphere)
 
 ### [2026-02-15] - Camera System & Raylib-Style Input
 
