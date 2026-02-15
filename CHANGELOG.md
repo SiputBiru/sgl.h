@@ -5,7 +5,7 @@
 - **Planned:** Texture Rendering support (Bindless).
 - **Planned:** Camera system (View/Projection Matrices).
 
-### [2026-02-15] - Embedded Shaders & Refactor
+### [2026-02-15] - Embedded Shaders & adding more draw function
 
 #### Added
 
