@@ -1,65 +1,30 @@
 #define SGL_IMPLEMENTATION
 #include "../sgl.h"
 
-int main(int argc, char **argv) {
-    // Init (Will try to load default.vert.spv / default.frag.spv internally)
-    sgl_InitWindow(800, 600, "SGL testbed Default & Custom");
+int main(int argc, char** argv) {
+	sgl_InitWindow(800, 800, "SGL: Raylib Inspired graphics library");
 
-    // OPTIONAL: Load a custom shader (e.g., a shader that makes everything
-    // Red) You only do this if you want to override the default.
-    /*
-    SDL_GPUShader* myVS = sgl_LoadShader("custom.vert.spv",
-    SDL_GPU_SHADERSTAGE_VERTEX, 1, 1); SDL_GPUShader* myFS =
-    sgl_LoadShader("custom.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
-    SDL_GPUGraphicsPipeline* myPipeline = sgl_CreatePipeline(myVS, myFS);
-    */
+	SGL_Camera cam;
+	sgl_CameraInit(&cam, 0.0f, 0.0f, 1.0f);
 
-    bool running = true;
-    while (running) {
-        SDL_Event e;
-        while (SDL_PollEvent(&e))
-            if (e.type == SDL_EVENT_QUIT) {
+	while (!sgl_WindowShouldClose()) {
 
-                running = false;
-            } else if (e.type == SDL_EVENT_KEY_DOWN) {
-                if (e.key.key == SDLK_Q) {
-                    running = false;
-                }
-            }
+		sgl_CameraUpdate(&cam);
 
-        sgl_Begin();
+		sgl_Begin();
+		sgl_SetCamera(&cam);
 
-        // -----------------------------------------------------
-        // Scenario A: Use Default Shader (No setup needed)
-        // -----------------------------------------------------
-        sgl_SetPipeline(sgl_GetDefaultPipeline()); // Or just pass NULL
-        sgl_DrawRectangle(10, 10, 100, 100,
-                          (SGL_COLOR){0, 255, 0, 255}); // Green
-        float time = SDL_GetTicks() / 1000.0f;
-        sgl_DrawRectangle(600 + SDL_sinf(time) * 100, 300, 50, 50,
-                          (SGL_COLOR){0, 0, 255, 255});
+		sgl_DrawRectangle(10, 10, 100, 100, (SGL_COLOR){ 0, 255, 0, 255 });
+		sgl_DrawTriangle(400, 300, 50, (SGL_COLOR){ 255, 0, 0, 255 });
 
-        sgl_DrawCircle(800 / 2, 600 / 2, 50, (SGL_COLOR){0, 0, 255, 255});
-        sgl_DrawTriangle(0, 0, 40, (SGL_COLOR){255, 0, 0, 255});
+		float time = SDL_GetTicks() / 1000.0f;
+		sgl_DrawRectangle(600 + SDL_sinf(time) * 100, 300, 50, 50, (SGL_COLOR){ 0, 0, 255, 255 });
 
-        // -----------------------------------------------------
-        // Scenario B: Use Custom Shader (If you loaded one)
-        // -----------------------------------------------------
-        /*
-        if (myPipeline) {
-             // Flush the previous batch before switching shaders?
-             // (Note: Currently sgl only supports 1 pipeline per frame in this
-        simple version.
-             //  Real batching would require a 'Flush' function here.)
+		sgl_DrawCircle(800 / 2, 800 / 2, 50, (SGL_COLOR){ 0, 0, 255, 255 });
 
-             sgl_SetPipeline(myPipeline);
-             sgl_DrawRectangle(200, 10, 100, 100, (SGL_COLOR){255, 0, 0, 255});
-        }
-        */
+		sgl_End();
+	}
 
-        sgl_End();
-    }
-
-    sgl_Shutdown();
-    return 0;
+	sgl_Shutdown();
+	return 0;
 }

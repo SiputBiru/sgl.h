@@ -134,31 +134,33 @@ glslc shaders/default.frag -o shaders/default.frag.spv
 In exactly one C file (e.g., `main.c`), define `SGL_IMPLEMENTATION` before including the header.
 
 ```C
-#include <SDL3/SDL.h>
 #define SGL_IMPLEMENTATION
 #include "sgl.h"
 
-int main(int argc, char* argv[]) {
-    sgl_InitWindow(800, 600, "SGL Demo");
+int main(int argc, char** argv) {
+ sgl_InitWindow(800, 800, "Simple GPU Library for SDL3");
 
-    bool running = true;
-    while (running) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT) running = false;
-        }
+ SGL_Camera cam;
+ sgl_CameraInit(&cam, 0.0f, 0.0f, 1.0f);
 
-        sgl_Begin();
+ // Raylib style: The loop condition handles input internally
+ while (!sgl_WindowShouldClose()) {
+        
+        // Update Game Logic
+  sgl_CameraUpdate(&cam);
 
-        // x, y, w, h, colors
-        sgl_DrawRectangle(100, 100, 200, 200, (SGL_COLOR){255, 0, 0, 255});
-        sgl_DrawRectangle(350, 100, 200, 200, (SGL_COLOR){0, 255, 0, 255});
+        // Render
+  sgl_Begin();
+  sgl_SetCamera(&cam);
 
-        sgl_End();
-    }
+  sgl_DrawRectangle(10, 10, 100, 100, (SGL_COLOR){ 0, 255, 0, 255 }); 
+  sgl_DrawTriangle(400, 300, 50, (SGL_COLOR){ 255, 0, 0, 255 });
 
-    sgl_Shutdown();
-    return 0;
+  sgl_End();
+ }
+
+ sgl_Shutdown();
+ return 0;
 }
 
 ```

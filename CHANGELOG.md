@@ -3,13 +3,20 @@
 ### [Unreleased]
 
 - **Planned:** Texture Rendering support (Bindless).
-- **Planned:** Camera system (View/Projection Matrices).
+- **Planned:** Camera system (View/Projection Matrices). (Almost done!)
 
-### [2026-02-15] - Embedded Shaders & adding more draw function
+### [2026-02-15] - Camera System & Raylib-Style Input
 
 #### Added
 
-- new draw function to create circle and triangle and also draw rectanglepro
+- **Camera System:** Introduced a 2D Camera API with zoom and pan support.
+  - Added `sgl_CameraInit`, `sgl_CameraUpdate` (WASD + Zoom), and `sgl_SetCamera`.
+  - Updated Vertex Shader to apply View/Projection matrices via Uniforms.
+- **Input Management:** Added Raylib-style input polling helpers.
+  - `sgl_WindowShouldClose()`: Manages the `SDL_Event` loop and closing logic internally.
+  - `sgl_IsKeyDown()`: Checks real-time keyboard state for smooth input handling.
+- **Depth Stencil:** Implemented proper Depth Texture creation (`D16_UNORM`) to handle depth testing for the new camera and future 3D features.
+- **New Shapes:** Added dedicated functions for drawing advanced primitives.
 
 ```C
 void sgl_DrawRectangle(f32 x, f32 y, f32 w, f32 h, SGL_COLOR color);
@@ -23,7 +30,11 @@ void sgl_DrawCircle(f32 x, f32 y, f32 radius, SGL_COLOR color);
 
 ```
 
-- updating the default.vert and frag accordingly
+#### Changed
+
+- **Shader Protocol**: Updated `default.vert` and `default.frag` to support camera uniforms (`camX`, `camY`, `zoom`) and pass Shape Type as `float` (Location 2) to fix Vulkan validation errors.
+
+- **Resource Management**: Updated `sgl_Shutdown` to properly release the internal depthTexture to prevent Vulkan validation errors on exit (`VUID-vkDestroyDevice-device-05137`).
 
 ### [2026-02-14] - Embedded Shaders & Refactor
 
