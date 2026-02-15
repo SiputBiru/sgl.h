@@ -39,6 +39,9 @@ int main(int argc, char **argv) {
         sgl_DrawRectangle(600 + SDL_sinf(time) * 100, 300, 50, 50,
                           (SGL_COLOR){0, 0, 255, 255});
 
+        sgl_DrawCircle(800 / 2, 600 / 2, 50, (SGL_COLOR){0, 0, 255, 255});
+        sgl_DrawTriangle(0, 0, 40, (SGL_COLOR){255, 0, 0, 255});
+
         // -----------------------------------------------------
         // Scenario B: Use Custom Shader (If you loaded one)
         // -----------------------------------------------------
