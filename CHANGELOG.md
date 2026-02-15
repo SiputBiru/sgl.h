@@ -5,6 +5,26 @@
 - **Planned:** Texture Rendering support (Bindless).
 - **Planned:** Camera system (View/Projection Matrices).
 
+### [2026-02-15] - Embedded Shaders & Refactor
+
+#### Added
+
+- new draw function to create circle and triangle and also draw rectanglepro
+
+```C
+void sgl_DrawRectangle(f32 x, f32 y, f32 w, f32 h, SGL_COLOR color);
+void sgl_DrawRectanglePro(
+    Rectangle rec, Vec2 origin, float rotation,
+    SGL_COLOR color);
+
+void sgl_DrawTriangle(f32 x, f32 y, f32 size, SGL_COLOR color);
+
+void sgl_DrawCircle(f32 x, f32 y, f32 radius, SGL_COLOR color);
+
+```
+
+- updating the default.vert and frag accordingly
+
 ### [2026-02-14] - Embedded Shaders & Refactor
 
 #### Added
