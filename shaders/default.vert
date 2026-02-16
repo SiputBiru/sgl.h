@@ -3,7 +3,8 @@
 // --- SET 0: Instance Data (Storage Buffer) ---
 struct InstanceData {
     vec4 rect;   // x, y, w, h
-    vec4 params; // x=angle, y=ox, z=oy, w=type
+    vec4 params; // x=angle, y=ox, z=oy, w=z-buffer
+    vec4 params2; // x=type, y=p1, z=p2, w=p3
     vec4 color;  // r, g, b, a
 };
 
@@ -27,7 +28,7 @@ layout(location = 2) out float outType;
 
 void main() {
     InstanceData inst = instances.data[gl_InstanceIndex];
-    int type = int(inst.params.w);
+    int type = int(inst.params2.x);
     
     // Generate Base Geometry (0..1)
     vec2 corner;
@@ -84,7 +85,7 @@ void main() {
     gl_Position = vec4(
         (viewPos.x / screenW) * 2.0 - 1.0, 
         (viewPos.y / screenH) * 2.0 - 1.0, 
-        0.0, 
+        inst.params.w, 
         1.0
     );
 }
