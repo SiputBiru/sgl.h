@@ -799,7 +799,7 @@ bool sgl_InternalInit(SDL_Window* window, SDL_GPUDevice* device) {
 
 	// Check and Log Backend
 	const char* backend = SDL_GetGPUDeviceDriver(sgl.device);
-	SDL_Log("[sgl INFO]SGL: Initialized. Graphics Backend: %s", backend);
+	SDL_Log("[INFO] SGL Initialized. Graphics Backend: %s", backend);
 
 	SDL_ClaimWindowForGPUDevice(device, window);
 	SDL_GetWindowSize(window, &sgl.winW, &sgl.winH);

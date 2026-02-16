@@ -29,9 +29,9 @@ SDL3 expects SPIR-V resources to be bound in specific sets and bindings. When wr
 
 | Resource Type | GLSL Keyword | Set (Space) | Binding | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **Uniform Buffers** | `uniform` | `set = 0` | `binding = 0` | Used for global data (Screen Size, Time). |
-| **Storage Buffers** | `buffer` | `set = 0` | `binding = 1` | Used for Instance Data (Transforms, Colors). |
-| **Textures** | `uniform sampler2D` | `set = 2` | `binding = 0` | (Future Use) Texture samplers. |
+| **Storage Buffers** | `buffer` | `set = 0` | `binding = 0` | Instance Data (Rects, Colors, Angles). Defined via `SDL_BindGPUVertexStorageBuffers`. |
+| **Uniform Buffers** | `uniform` | `set = 1` | `binding = 0` | Global Data (Screen Size, Camera). Defined via `SDL_PushGPUVertexUniformData`. |
+| **Textures** | `uniform sampler2D` | `set = 2` | `binding = 0` | (Future Use) Standard Texture Sampler. |
 
 ## Setup
 
@@ -51,57 +51,94 @@ Note: This shader now accepts the Screen Size via a Uniform buffer (slot `b0`) s
 ```glsl
 #version 450
 
-// Binding 0: Uniforms (Screen Size)
-// std140 ensures memory alignment matches C struct
-layout(std140, set = 0, binding = 0) uniform ScreenUniforms {
-    float screenW;
-    float screenH;
-    float padding1;
-    float padding2;
-};
-
-// Binding 1: Instance Data (Storage Buffer)
-// std430 is standard for SSBOs
+// --- SET 0: Instance Data (Storage Buffer) ---
 struct InstanceData {
-    vec4 rect;  // x, y, w, h
-    vec4 color; // r, g, b, a
+    vec4 rect;   // x, y, w, h
+    vec4 params; // x=angle, y=ox, z=oy, w=z-buffer
+    vec4 params2; // x=type, y=p1, z=p2, w=p3
+    vec4 color;  // r, g, b, a
 };
 
-layout(std430, set = 0, binding = 1) readonly buffer Instances {
+layout(std430, set = 0, binding = 0) readonly buffer Instances {
     InstanceData data[];
 } instances;
 
-// Output to Fragment Shader
+// --- SET 1: Uniform Buffer ---
+layout(set = 1, binding = 0) uniform ScreenUniforms {
+    float screenW;
+    float screenH;
+    float camX, camY;
+    float zoom;
+    float padding; // Alignment padding
+};
+
+// --- Outputs to Fragment Shader ---
 layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec2 outUV;
+layout(location = 2) out float outType;
 
 void main() {
-    // Pull Data for this specific instance
-    // In Vulkan GLSL, use gl_InstanceIndex (not gl_InstanceID)
     InstanceData inst = instances.data[gl_InstanceIndex];
-
-    // Generate Quad Geometry on the fly (Indices 0..5)
+    int type = int(inst.params2.x);
+    
+    // Generate Base Geometry (0..1)
     vec2 corner;
-    uint idx = gl_VertexIndex % 6; // Use gl_VertexIndex
+    uint idx = gl_VertexIndex % 6;
+    
+    if (type == 1) { // Triangle
+        if      (idx == 0) corner = vec2(0.5, 0.0); // Top Center
+        else if (idx == 1) corner = vec2(0.0, 1.0); // Bottom Left
+        else if (idx == 2) corner = vec2(1.0, 1.0); // Bottom Right
+        else               corner = vec2(0.0, 0.0); // Degenerate
+    } else { // Rect (0) or Circle (2)
+        // Standard Quad vertices
+        if      (idx == 0) corner = vec2(0, 0);
+        else if (idx == 1) corner = vec2(0, 1);
+        else if (idx == 2) corner = vec2(1, 0);
+        else if (idx == 3) corner = vec2(1, 0);
+        else if (idx == 4) corner = vec2(0, 1);
+        else               corner = vec2(1, 1);
+    }
 
-    // Triangle 1
-    if      (idx == 0) corner = vec2(0.0, 0.0);
-    else if (idx == 1) corner = vec2(0.0, 1.0);
-    else if (idx == 2) corner = vec2(1.0, 0.0);
-    // Triangle 2
-    else if (idx == 3) corner = vec2(1.0, 0.0);
-    else if (idx == 4) corner = vec2(0.0, 1.0);
-    else               corner = vec2(1.0, 1.0);
-
-    // Calculate World Position (x + w * corner)
-    vec2 worldPos = inst.rect.xy + (corner * inst.rect.zw);
-
-    // Convert to Normalized Device Coordinates (NDC) using Uniforms
-    vec2 ndc;
-    ndc.x = (worldPos.x / screenW) * 2.0 - 1.0;
-    ndc.y = (worldPos.y / screenH) * 2.0 - 1.0; // Y is down in Vulkan
-
-    gl_Position = vec4(ndc, 0.0, 1.0);
+    // Pass data to Fragment Shader
+    outUV = corner; 
+    outType = float(type);
     outColor = inst.color;
+
+    // Apply Rotation (Model Space)
+    // Scale local quad by width/height (rect.zw)
+    vec2 localPos = corner * inst.rect.zw; 
+    
+    // Offset by origin (pivot point)
+    localPos -= inst.params.yz; 
+    
+    // Rotate
+    float theta = inst.params.x;
+    float c = cos(theta); 
+    float s = sin(theta);
+    vec2 rotated = vec2(
+        localPos.x * c - localPos.y * s, 
+        localPos.x * s + localPos.y * c
+    );
+    
+    // Translate to World Position
+    vec2 worldPos = inst.rect.xy + rotated;
+
+    // Apply Camera (World -> Screen Space)
+    // Camera Position (camX, camY) represents the Top-Left of the screen
+    vec2 cameraPos = vec2(camX, camY);
+    
+    // Apply Pan and Zoom
+    vec2 viewPos = (worldPos - cameraPos) * zoom;
+
+    // Convert to NDC (Normalized Device Coordinates)
+    // Map 0..ScreenSize to -1..1
+    gl_Position = vec4(
+        (viewPos.x / screenW) * 2.0 - 1.0, 
+        (viewPos.y / screenH) * 2.0 - 1.0, 
+        inst.params.w, 
+        1.0
+    );
 }
 ```
 
@@ -112,10 +149,30 @@ Save this as `shaders/default.frag`
 ```glsl
 #version 450
 
+// Matches Vertex Shader Output Location 0
 layout(location = 0) in vec4 inColor;
+
+// Matches Vertex Shader Output Location 1
+layout(location = 1) in vec2 inUV;
+
+// Matches Vertex Shader Output Location 2
+layout(location = 2) flat in float inType; 
+
 layout(location = 0) out vec4 outFragColor;
 
 void main() {
+    // Type 2.0 is SGL_SHAPE_CIRCLE
+    // check > 1.5 to safely match "2" without floating point precision issues
+    if (inType > 1.5) {
+        // Circle Logic:
+        // The UVs come in from 0.0 to 1.0. 
+        // We calculate distance from the center (0.5, 0.5).
+        vec2 uv = inUV - 0.5;
+        if (length(uv) > 0.5) {
+            discard; // Cut out the corners to make a circle
+        }
+    }
+
     outFragColor = inColor;
 }
 ```
