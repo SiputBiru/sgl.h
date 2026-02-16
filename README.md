@@ -31,7 +31,7 @@ SDL3 expects SPIR-V resources to be bound in specific sets and bindings. When wr
 | :--- | :--- | :--- | :--- | :--- |
 | **Storage Buffers** | `buffer` | `set = 0` | `binding = 0` | Instance Data (Rects, Colors, Angles). Defined via `SDL_BindGPUVertexStorageBuffers`. |
 | **Uniform Buffers** | `uniform` | `set = 1` | `binding = 0` | Global Data (Screen Size, Camera). Defined via `SDL_PushGPUVertexUniformData`. |
-| **Textures** | `uniform sampler2D` | `set = 2` | `binding = 0` | (Future Use) Standard Texture Sampler. |
+| **Textures** | `uniform sampler2D` | `set = 2` | `binding = 0` | (still in development) Standard Texture Sampler. |
 
 ## Setup
 
@@ -263,10 +263,10 @@ now `sgl` will reports:
 
 ## Roadmap
 
-- Implement `sgl_DrawTexture(SDL_Texture* tex, x, y, w, h)`
+- Implement `sgl_DrawTexture(SDL_Texture* tex, x, y, w, h)`(DONE! but need refactoring later)
 
 - Add `sgl_SetCamera(x, y, zoom)` to support scrolling and zooming. (but maybe will not happen).
 
 - **Text Rendering:** Implement a Bitmap Font system where glyphs are treated as textured quads.
 
-- **Z-Ordering:** Add a Depth Buffer (Z-Buffer) pipeline so sprites can be drawn in any order but sorted correctly on the GPU.
+- **Z-Ordering:** Add a Depth Buffer (Z-Buffer) pipeline so sprites can be drawn in any order but sorted correctly on the GPU. (there is z buffer but will need refactoring later)

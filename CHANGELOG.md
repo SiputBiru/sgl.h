@@ -5,12 +5,26 @@
 - **Planned:** Texture Rendering support (Bindless).
 - **Planned:** 3D Primitive Rendering (Cube, Sphere)
 
-### [2026-02-16] - Logger
+### [2026-02-16] - Logger & 2D Texture
 
 #### Added
 
 - **SGL logger:**
   - Added `SGL_Log`, `SGL_Warn`, and `SGL_Error`.
+- **2D Texture loader:**
+  - Added `sgl_DrawTexture`
+  - the fragment shaders now have unrolled bindings (later will be refactoring this to properly load other image format and other things idk Man)
+
+  ```glsl
+  layout(set = 2, binding = 0) uniform sampler2D tex0;
+  layout(set = 2, binding = 1) uniform sampler2D tex1;
+  layout(set = 2, binding = 2) uniform sampler2D tex2;
+  layout(set = 2, binding = 3) uniform sampler2D tex3;
+  layout(set = 2, binding = 4) uniform sampler2D tex4;
+  layout(set = 2, binding = 5) uniform sampler2D tex5;
+  layout(set = 2, binding = 6) uniform sampler2D tex6;
+  layout(set = 2, binding = 7) uniform sampler2D tex7;
+  ```
 
 ### [2026-02-15] - Camera System & Raylib-Style Input
 
