@@ -7,8 +7,10 @@
 #define SGL_H
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_log.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 typedef float f32;
 #define SGL_MAX_INSTANCES 10000
@@ -81,6 +83,19 @@ void sgl_CameraUpdate(SGL_Camera* cam);
 // ============================================================================
 
 #ifdef SGL_IMPLEMENTATION
+
+// For logs things
+
+#define SGL_LOG_CATEGORY SDL_LOG_CATEGORY_CUSTOM
+
+#define SGL_Log(fmt, ...)                                                                          \
+	SDL_LogMessage(SGL_LOG_CATEGORY, SDL_LOG_PRIORITY_INFO, fmt, ##__VA_ARGS__)
+
+#define SGL_Warn(fmt, ...)                                                                         \
+	SDL_LogMessage(SGL_LOG_CATEGORY, SDL_LOG_PRIORITY_WARN, fmt, ##__VA_ARGS__)
+
+#define SGL_Error(fmt, ...)                                                                        \
+	SDL_LogMessage(SGL_LOG_CATEGORY, SDL_LOG_PRIORITY_ERROR, fmt, ##__VA_ARGS__)
 
 typedef enum {
 	SGL_SHAPE_RECT = 0,
@@ -579,6 +594,54 @@ const static unsigned int shaders_default_frag_spv_len = 964;
 
 // --- Helper Functions ---
 
+// LOGS
+static void
+sgl_LogOutputFunction(void* userdata, int category, SDL_LogPriority priority, const char* message) {
+	const char* color = "\033[0m";
+	const char* reset = "\033[0m";
+	const char* tag = "[INFO]";
+	FILE* stream = stdout;
+
+	switch (priority) {
+	case SDL_LOG_PRIORITY_VERBOSE:
+		tag = "[VERB]";
+		color = "\033[90m";
+		break; // Gray
+	case SDL_LOG_PRIORITY_DEBUG:
+		tag = "[DBUG]";
+		color = "\033[36m";
+		break; // Cyan
+	case SDL_LOG_PRIORITY_INFO:
+		tag = "[INFO]";
+		color = "\033[32m";
+		break; // Green
+	case SDL_LOG_PRIORITY_WARN:
+		tag = "[WARN]";
+		color = "\033[33m";
+		break; // Yellow
+	case SDL_LOG_PRIORITY_ERROR:
+		tag = "[ERR ]";
+		color = "\033[31m";
+		stream = stderr;
+		break; // Red
+	case SDL_LOG_PRIORITY_CRITICAL:
+		tag = "[CRIT]";
+		color = "\033[41;37m";
+		stream = stderr;
+		break; // White on Red Bg
+	default:
+		break;
+	}
+
+	// Format: [TAG] SGL: Message
+	if (category == SGL_LOG_CATEGORY) {
+		fprintf(stream, "%s%s SGL: %s%s\n", color, tag, message, reset);
+	} else {
+		// If other parts of SDL log something, print it cleanly too
+		fprintf(stream, "%s%s %s%s\n", color, tag, message, reset);
+	}
+}
+
 static void sgl_SetViewport(SDL_GPURenderPass* pass) {
 	SDL_GPUViewport viewport = { 0, 0, (f32)sgl.winW, (f32)sgl.winH, 0.0f, 1.0f };
 	SDL_SetGPUViewport(pass, &viewport);
@@ -676,7 +739,7 @@ sgl_LoadShader(const char* filename, SDL_GPUShaderStage stage, int num_uniform, 
 	size_t codeSize;
 	void* code = SDL_LoadFile(filename, &codeSize);
 	if (!code) {
-		SDL_Log("SGL Error: Shader file not found: %s", filename);
+		SGL_Error("Shader file not found: %s", filename);
 		return NULL;
 	}
 
@@ -696,15 +759,15 @@ sgl_LoadShader(const char* filename, SDL_GPUShaderStage stage, int num_uniform, 
 	SDL_free(code);
 
 	if (shader) {
-		SDL_Log(
-			"SGL: Loaded Shader '%s' [Stage: %d | Uniforms: %d | Storage: %d]",
+		SGL_Log(
+			"Loaded Shader '%s' [Stage: %d | Uniforms: %d | Storage: %d]",
 			filename,
 			stage,
 			num_uniform,
 			num_storage
 		);
 	} else {
-		SDL_Log("SGL Error: Failed to create shader from %s", filename);
+		SGL_Error("Failed to create shader from %s", filename);
 	}
 
 	return shader;
@@ -799,7 +862,7 @@ bool sgl_InternalInit(SDL_Window* window, SDL_GPUDevice* device) {
 
 	// Check and Log Backend
 	const char* backend = SDL_GetGPUDeviceDriver(sgl.device);
-	SDL_Log("[INFO] SGL Initialized. Graphics Backend: %s", backend);
+	SGL_Log("SGL Initialized. Graphics Backend: %s", backend);
 
 	SDL_ClaimWindowForGPUDevice(device, window);
 	SDL_GetWindowSize(window, &sgl.winW, &sgl.winH);
@@ -808,12 +871,14 @@ bool sgl_InternalInit(SDL_Window* window, SDL_GPUDevice* device) {
 									  .size = SGL_MAX_INSTANCES * sizeof(SGL_InstanceData) };
 	sgl.instanceBuffer = SDL_CreateGPUBuffer(device, &bInfo);
 
-	SDL_GPUTransferBufferCreateInfo tInfo = { .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-											  .size =
-												  SGL_MAX_INSTANCES * sizeof(SGL_InstanceData) };
+	SDL_GPUTransferBufferCreateInfo tInfo = {
+		.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+		.size = SGL_MAX_INSTANCES * sizeof(SGL_InstanceData),
+	};
 	sgl.transferBuffer = SDL_CreateGPUTransferBuffer(device, &tInfo);
 
 	// LOAD DEFAULT SHADERS
+	SGL_Log("Load Default Shaders");
 	SDL_GPUShader* v = sgl_CreateShaderFromBytes(
 		shaders_default_vert_spv,
 		sizeof(shaders_default_vert_spv),
@@ -836,7 +901,7 @@ bool sgl_InternalInit(SDL_Window* window, SDL_GPUDevice* device) {
 		SDL_ReleaseGPUShader(device, v);
 		SDL_ReleaseGPUShader(device, f);
 	} else {
-		SDL_Log("SGL Error: Failed to load embedded default shaders.");
+		SGL_Error("Failed to load embedded default shaders.");
 		return false;
 	}
 
@@ -844,6 +909,11 @@ bool sgl_InternalInit(SDL_Window* window, SDL_GPUDevice* device) {
 }
 
 void sgl_InitWindow(int w, int h, const char* title) {
+
+	SDL_SetLogOutputFunction(sgl_LogOutputFunction, NULL);
+
+	SDL_SetLogPriority(SGL_LOG_CATEGORY, SDL_LOG_PRIORITY_INFO);
+
 	SDL_Init(SDL_INIT_VIDEO);
 	SDL_Window* win = SDL_CreateWindow(title, w, h, SDL_WINDOW_RESIZABLE);
 
@@ -863,6 +933,7 @@ void sgl_Shutdown() {
 		SDL_ReleaseGPUGraphicsPipeline(sgl.device, sgl.defaultPipeline);
 
 	if (sgl.depthTexture) {
+		SGL_Warn("Depth texture was not cleaned up manually (Fixed automatically).");
 		SDL_ReleaseGPUTexture(sgl.device, sgl.depthTexture);
 		sgl.depthTexture = NULL;
 	}
@@ -870,6 +941,7 @@ void sgl_Shutdown() {
 	SDL_DestroyGPUDevice(sgl.device);
 	SDL_DestroyWindow(sgl.window);
 	SDL_Quit();
+	SGL_Log("Shutdowning gracefully..");
 }
 
 // --- Pipeline Switching ---
@@ -949,7 +1021,7 @@ void sgl_End() {
 
 	if (swapTexture && sgl.depthTexture) {
 		if (sgl.activePipeline == NULL) {
-			SDL_Log("SGL Error: Attempting to draw with NULL pipeline!");
+			SGL_Error("Attempting to draw with NULL pipeline!");
 			return;
 		}
 
