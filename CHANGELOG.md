@@ -5,6 +5,13 @@
 - **Planned:** Texture Rendering support (Bindless).
 - **Planned:** 3D Primitive Rendering (Cube, Sphere)
 
+### [2026-02-16] - Logger
+
+#### Added
+
+- **SGL logger:**
+  - Added `SGL_Log`, `SGL_Warn`, and `SGL_Error`.
+
 ### [2026-02-15] - Camera System & Raylib-Style Input
 
 #### Added
