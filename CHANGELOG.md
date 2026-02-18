@@ -5,6 +5,22 @@
 - **Planned:** Texture Rendering support (Bindless).
 - **Planned:** 3D Primitive Rendering (Cube, Sphere)
 
+### [2026-02-18] - 3D Camera System & 3D Implementation
+
+#### Added
+
+- **Mode-Based Rendering API**: Introduced sgl_BeginMode3D() and sgl_BeginMode2D() to allow seamless switching between 3D perspective and 2D orthographic projections within a single frame.
+
+- **3D Camera System**: Added the SGL_Camera3D structure, supporting position, target look-at points, up-vectors, and adjustable Field of View (FOV).
+
+- **3D Primitive Support**: Added sgl_DrawCube(), which utilizes shader-side vertex pulling to generate a 36-vertex cube from a single instance data point.
+
+- **Matrix Math Library**: Implemented internal math helpers for 4x4 matrix operations, including Identity, Orthographic, Perspective, and LookAt calculations.
+
+- **Automatic Batch Flushing**: Updated the internal renderer to automatically detect when a mode switch (2D to 3D) occurs, triggering a GPU flush to handle the different vertex counts (6 for quads vs. 36 for cubes).
+
+- **Vulkan-Compatible Depth Mapping**: Optimized the perspective projection matrix to map depth to the $[0, 1]$ range, ensuring compatibility with the SDL3 GPU/Vulkan standard.
+
 ### [2026-02-16] - Logger & 2D Texture
 
 #### Added

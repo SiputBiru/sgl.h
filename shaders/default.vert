@@ -1,91 +1,71 @@
 #version 450
 
-// --- SET 0: Instance Data (Storage Buffer) ---
+// --- SET 0: Instance Data ---
 struct InstanceData {
-    vec4 rect;   // x, y, w, h
-    vec4 params; // x=angle, y=ox, z=oy, w=z-buffer
-    vec4 params2; // x=type, y=p1, z=p2, w=p3
-    vec4 color;  // r, g, b, a
+    vec4 rect;    // [x, y, z, size]
+    vec4 params;  // [angle, ox, oy, unused]
+    vec4 params2; // [type, p1, p2, p3]
+    vec4 color;   // [r, g, b, a]
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer Instances {
     InstanceData data[];
 } instances;
 
-// --- SET 1: Uniform Buffer ---
-layout(set = 1, binding = 0) uniform ScreenUniforms {
-    float screenW;
-    float screenH;
-    float camX, camY;
-    float zoom;
-    float padding; // Alignment padding
+// --- SET 1: Uniforms (Matrix) ---
+layout(set = 1, binding = 0) uniform Uniforms {
+    mat4 mvp;
 };
 
-// --- Outputs to Fragment Shader ---
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec2 outUV;
 layout(location = 2) out float outType;
 
+// Cube Vertices (Hardcoded for vertex pulling)
+const vec3 cubeVerts[36] = vec3[36](
+    vec3(-0.5, -0.5,  0.5), vec3( 0.5, -0.5,  0.5), vec3( 0.5,  0.5,  0.5), vec3( 0.5,  0.5,  0.5), vec3(-0.5,  0.5,  0.5), vec3(-0.5, -0.5,  0.5), // Front
+    vec3( 0.5, -0.5, -0.5), vec3(-0.5, -0.5, -0.5), vec3(-0.5,  0.5, -0.5), vec3(-0.5,  0.5, -0.5), vec3( 0.5,  0.5, -0.5), vec3( 0.5, -0.5, -0.5), // Back
+    vec3(-0.5,  0.5,  0.5), vec3( 0.5,  0.5,  0.5), vec3( 0.5,  0.5, -0.5), vec3( 0.5,  0.5, -0.5), vec3(-0.5,  0.5, -0.5), vec3(-0.5,  0.5,  0.5), // Top
+    vec3(-0.5, -0.5, -0.5), vec3( 0.5, -0.5, -0.5), vec3( 0.5, -0.5,  0.5), vec3( 0.5, -0.5,  0.5), vec3(-0.5, -0.5,  0.5), vec3(-0.5, -0.5, -0.5), // Bottom
+    vec3( 0.5, -0.5,  0.5), vec3( 0.5, -0.5, -0.5), vec3( 0.5,  0.5, -0.5), vec3( 0.5,  0.5, -0.5), vec3( 0.5,  0.5,  0.5), vec3( 0.5, -0.5,  0.5), // Right
+    vec3(-0.5, -0.5, -0.5), vec3(-0.5, -0.5,  0.5), vec3(-0.5,  0.5,  0.5), vec3(-0.5,  0.5,  0.5), vec3(-0.5,  0.5, -0.5), vec3(-0.5, -0.5, -0.5)  // Left
+);
+
 void main() {
     InstanceData inst = instances.data[gl_InstanceIndex];
     int type = int(inst.params2.x);
-    
-    // Generate Base Geometry (0..1)
-    vec2 corner;
-    uint idx = gl_VertexIndex % 6;
-    
-    if (type == 1) { // Triangle
-        if      (idx == 0) corner = vec2(0.5, 0.0); // Top Center
-        else if (idx == 1) corner = vec2(0.0, 1.0); // Bottom Left
-        else if (idx == 2) corner = vec2(1.0, 1.0); // Bottom Right
-        else               corner = vec2(0.0, 0.0); // Degenerate
-    } else { // Rect (0) or Circle (2)
-        // Standard Quad vertices
-        if      (idx == 0) corner = vec2(0, 0);
-        else if (idx == 1) corner = vec2(0, 1);
-        else if (idx == 2) corner = vec2(1, 0);
-        else if (idx == 3) corner = vec2(1, 0);
-        else if (idx == 4) corner = vec2(0, 1);
-        else               corner = vec2(1, 1);
+    vec3 localPos;
+
+    if (type == 100) { // CUBE
+        localPos = cubeVerts[gl_VertexIndex % 36];
+        localPos *= inst.rect.w; // Scale by Size (stored in w/h)
+        localPos += inst.rect.xyz; // Translate
+        outUV = vec2(0.0);
+        
+        // Fake Lighting (Face darkening)
+        uint face = (gl_VertexIndex % 36) / 6;
+        float shade = 1.0;
+        if(face == 1) shade = 0.5; if(face == 2) shade = 1.0; if(face == 3) shade = 0.3;
+        if(face == 4) shade = 0.8; if(face == 5) shade = 0.7;
+        outColor = vec4(inst.color.rgb * shade, inst.color.a);
+    } else { // 2D (Rect/Tri/Circle)
+        vec2 corner;
+        uint idx = gl_VertexIndex % 6;
+        if (type == 1) { // Triangle
+             if (idx == 0) corner = vec2(0.5, 0.0); else if (idx == 1) corner = vec2(0.0, 1.0); else corner = vec2(1.0, 1.0);
+        } else { // Quad
+             if (idx == 0) corner = vec2(0, 0); else if (idx == 1) corner = vec2(0, 1); else if (idx == 2) corner = vec2(1, 0);
+             else if (idx == 3) corner = vec2(1, 0); else if (idx == 4) corner = vec2(0, 1); else corner = vec2(1, 1);
+        }
+        outUV = vec2(corner.x, 1.0 - corner.y);
+        
+        // 2D Rotation
+        vec2 p = (corner * inst.rect.zw) - inst.params.yz;
+        float c = cos(inst.params.x), s = sin(inst.params.x);
+        localPos = vec3(inst.rect.xy + vec2(p.x*c - p.y*s, p.x*s + p.y*c), 0.0);
+        outColor = inst.color;
     }
 
-    // Pass data to Fragment Shader
-    outUV = corner; 
     outType = float(type);
-    outColor = inst.color;
-
-    // Apply Rotation (Model Space)
-    // Scale local quad by width/height (rect.zw)
-    vec2 localPos = corner * inst.rect.zw; 
-    
-    // Offset by origin (pivot point)
-    localPos -= inst.params.yz; 
-    
-    // Rotate
-    float theta = inst.params.x;
-    float c = cos(theta); 
-    float s = sin(theta);
-    vec2 rotated = vec2(
-        localPos.x * c - localPos.y * s, 
-        localPos.x * s + localPos.y * c
-    );
-    
-    // Translate to World Position
-    vec2 worldPos = inst.rect.xy + rotated;
-
-    // Apply Camera (World -> Screen Space)
-    // Camera Position (camX, camY) represents the Top-Left of the screen
-    vec2 cameraPos = vec2(camX, camY);
-    
-    // Apply Pan and Zoom
-    vec2 viewPos = (worldPos - cameraPos) * zoom;
-
-    // Convert to NDC (Normalized Device Coordinates)
-    // Map 0..ScreenSize to -1..1
-    gl_Position = vec4(
-        (viewPos.x / screenW) * 2.0 - 1.0, 
-        (viewPos.y / screenH) * 2.0 - 1.0, 
-        inst.params.w, 
-        1.0
-    );
+    gl_Position = mvp * vec4(localPos, 1.0);
 }
