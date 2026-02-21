@@ -265,8 +265,10 @@ now `sgl` will reports:
 
 - Implement `sgl_DrawTexture(SDL_Texture* tex, x, y, w, h)`(DONE! but need refactoring later)
 
-- Add `sgl_SetCamera(x, y, zoom)` to support scrolling and zooming. (but maybe will not happen).
+- Add `sgl_SetCamera(x, y, zoom)` to support scrolling and zooming. (but maybe will not happen). (DONE!)
 
 - **Text Rendering:** Implement a Bitmap Font system where glyphs are treated as textured quads.
 
 - **Z-Ordering:** Add a Depth Buffer (Z-Buffer) pipeline so sprites can be drawn in any order but sorted correctly on the GPU. (there is z buffer but will need refactoring later)
+
+- **Sparse Bindless Texture arrays**: combining massive, partially resident texture with direct, shader-side access. (On Progress)

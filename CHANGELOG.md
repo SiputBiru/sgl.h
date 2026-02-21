@@ -2,8 +2,23 @@
 
 ### [Unreleased]
 
-- **Planned:** Texture Rendering support (Bindless).
-- **Planned:** 3D Primitive Rendering (Cube, Sphere)
+- **Planned:** 3D Primitive Rendering (Sphere, Cylinder)
+- **Planned:** Source Rectangle Support (Sprite Sheets)
+
+### [2026-02-21] - Bindless Textures & VRAM Management
+
+#### Added
+
+- **Bindless Texture Arrays:** Replaced the legacy 8-slot binding system with a single global `sampler2DArray` (256 layers). The shader now dynamically pulls texture slices using a `texIndex` passed via the SSBO, enabling thousands of unique textures to be drawn in a single draw call without CPU binding overhead.
+
+- **VRAM Free List Allocator:** Implemented a memory manager for the global texture array. `sgl_DestroyTexture` now recycles layer IDs into a stack, allowing `sgl_LoadTexture` to intelligently overwrite unused VRAM slices to prevent memory leaks.
+
+- **Automatic Asset Standardization:** Integrated `SDL_ScaleSurface` into the loading pipeline. All loaded images are now automatically scaled (using Nearest Neighbor) to strictly fit the 512x512 array constraint, preventing Vulkan validation errors with arbitrary image sizes.
+
+#### Changed
+
+- **Shader Architecture:** Unified the Fragment Shader to use a single `globalTextures` binding, removing the limitation of only having 8 active textures per frame.
+- **Texture API:** Updated `sgl_DrawTexture` to pass texture IDs purely as data in the Instance Buffer, completely decoupling rendering from resource binding.
 
 ### [2026-02-18] - 3D Camera System & 3D Implementation
 
