@@ -15,10 +15,13 @@
 
 - **Automatic Asset Standardization:** Integrated `SDL_ScaleSurface` into the loading pipeline. All loaded images are now automatically scaled (using Nearest Neighbor) to strictly fit the 512x512 array constraint, preventing Vulkan validation errors with arbitrary image sizes.
 
+- **3D Camera Controller**: adding `sgl_Camera3DUpdate` to handle fly camera controller, and also adding new attribute of `type` in the SGL_Camera3D to change wheter want to use Free Fly or orbiting.
+
 #### Changed
 
 - **Shader Architecture:** Unified the Fragment Shader to use a single `globalTextures` binding, removing the limitation of only having 8 active textures per frame.
 - **Texture API:** Updated `sgl_DrawTexture` to pass texture IDs purely as data in the Instance Buffer, completely decoupling rendering from resource binding.
+- **New camera mode enum for 3d**: `SGL_CAMERA_MODE` will currently have `CAMERA_FREE` and `CAMERA_ORBITAL`, and also the `sgl_Camera3DUpdate` will need to specify the camera `mode` and also the `deltaTime`.
 
 ### [2026-02-18] - 3D Camera System & 3D Implementation
 
