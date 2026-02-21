@@ -35,6 +35,7 @@ SDL3 expects SPIR-V resources to be bound in specific sets and bindings. When wr
 | **Uniform Buffers** | `uniform` | `set = 1` | `binding = 0` | Global Data (Screen Size, Camera). Defined via `SDL_PushGPUVertexUniformData`. |
 | **Textures** | `uniform sampler2DArray` | `set = 2` | `binding = 0` | A single massive array containing up to 256 texture layers. |
 
+<br>
 ## Setup
 
 ### The Shaders
@@ -46,62 +47,117 @@ Save these in a folder named `shaders/`.
 > **SGL now has embedded default shaders!**
 > No longer need to ship or load a `shaders/` folder. The library works out-of-the-box with a single header file.
 
-#### Vertex Shader (`shaders/default.vert`)
+### Custom Shaders
 
-Note: This shader now accepts the Screen Size via a Uniform buffer (slot `b0`) so it handles window resizing automatically.
+You can write your own custom GLSL shaders to create special effects (like glowing outlines, CRT scanlines, or custom 3D lighting).
+If you write a custom shader, it must conform to the library's bindless memory layout.
+
+#### Custom Vertex Shader (`custom.vert`)
+
+Your vertex shader must read from the `std430` instance storage buffer (Set 0) and apply the Camera matrix (Set 1). You generate the geometry mathematically using `gl_VertexIndex`.
 
 ```glsl
-// ... [Input Structs] ...
+#version 450
 
+// --- SET 0: The SGL Instance Data ---
+struct InstanceData {
+    vec4 rect;    // x, y, z, size
+    vec4 params;  // angle, ox, oy, unused
+    vec4 params2; // type, texIndex, p2, p3
+    vec4 color;   // r, g, b, a
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer Instances {
+    InstanceData data[];
+} instances;
+
+// --- SET 1: The Camera Matrix ---
+layout(set = 1, binding = 0) uniform Uniforms {
+    mat4 mvp; // Model-View-Projection matrix from sgl_BeginMode
+};
+
+// Outputs to your Fragment Shader
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec2 outUV;
 layout(location = 2) flat out int outTexIndex;
-layout(location = 3) flat out float outType;
 
 void main() {
     InstanceData inst = instances.data[gl_InstanceIndex];
-    int type = int(inst.params2.x);
-
-    // UNIFIED 3D & 2D LOGIC
-    if (type == 100) { // CUBE
-        // ... [Vertex Pulling for 36-vertex Cube] ...
-    } else { // 2D SHAPE
-        // ... [Vertex Pulling for 6-vertex Quad] ...
-    }
     
-    outTexIndex = int(inst.params2.y); // Pass texture ID to Fragment Shader
+    // ... [Your custom Vertex Pulling logic goes here] ...
+    // Calculate localPos and outUV based on gl_VertexIndex
+
+    outColor = inst.color;
+    outTexIndex = int(inst.params2.y);
     gl_Position = mvp * vec4(localPos, 1.0);
 }
 ```
 
-#### Fragment Shader (`shaders/default.frag`)
+#### Custom Fragment Shader (custom.frag)
 
-Save this as `shaders/default.frag`
+If your custom shader needs to draw images, it must access SGL's global texture array (Set 2).
 
 ```glsl
-// ... [Inputs] ...
+#version 450
 
-// ONE BINDING TO RULE THEM ALL
+layout(location = 0) in vec4 inColor;
+layout(location = 1) in vec2 inUV;
+layout(location = 2) flat in int inTexIndex;
+
+// --- SET 2: The SGL Texture Array ---
 layout(set = 2, binding = 0) uniform sampler2DArray globalTextures;
 
+layout(location = 0) out vec4 outFragColor;
+
 void main() {
-    // Bindless Texture Fetching
+    vec4 baseColor = inColor;
+
+    // Apply texture if the instance has one
     if (inTexIndex >= 0) {
-        // Z-coordinate selects the layer slice!
-        outFragColor = texture(globalTextures, vec3(inUV, float(inTexIndex))) * inColor;
-    } else {
-        outFragColor = inColor;
+        baseColor *= texture(globalTextures, vec3(inUV.x, inUV.y, float(inTexIndex)));
     }
+
+    // ... [Your custom pixel effects (e.g., color tinting, glowing, discarding) go here] ...
+
+    outFragColor = baseColor;
 }
 ```
 
-### Compiling Shader
+#### Compiling and loading
 
-Since the extensions are now .vert and .frag (standard GLSL extensions), the compilation command is slightly simpler.
+Custom shaders must be pre-compiled to SPIR-V using glslc (included in the Vulkan SDK).
 
 ```bash
-glslc shaders/default.vert -o shaders/default.vert.spv
-glslc shaders/default.frag -o shaders/default.frag.spv
+glslc shaders/custom.vert -o shaders/custom.vert.spv
+glslc shaders/custom.frag -o shaders/custom.frag.spv
+```
+
+then, load and apply them in your C code using SGL's pipeline API:
+
+```C
+// Load the compiled SPIR-V files
+// Signature: sgl_LoadShader(filename, stage, num_uniforms, num_storage, num_samplers)
+SDL_GPUShader* customVert = sgl_LoadShader("shaders/custom.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 1, 1, 0);
+SDL_GPUShader* customFrag = sgl_LoadShader("shaders/custom.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0, 1);
+
+// Create the pipeline
+SDL_GPUGraphicsPipeline* customPipeline = sgl_CreatePipeline(customVert, customFrag);
+
+while (!sgl_WindowShouldClose()) {
+    sgl_BeginDrawing();
+    
+    // Set your custom pipeline
+    sgl_SetPipeline(customPipeline);
+    
+    // Draw shapes with your special effects!
+    sgl_DrawRectangle(10, 10, 100, 100, (SGL_COLOR){255, 0, 0, 255});
+    
+    // Reset back to SGL's default pipeline for normal drawing
+    sgl_SetPipeline(NULL); 
+    sgl_DrawRectangle(150, 10, 100, 100, (SGL_COLOR){0, 255, 0, 255});
+    
+    sgl_EndDrawing();
+}
 ```
 
 ## Implementation
