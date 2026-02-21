@@ -8,20 +8,22 @@ I wrote this to test the concepts from Mason Ramali's "It's Not About The API" t
 
 - **Single Header:** Drop `sgl.h` into your project.
 - **Vertex Pulling:** Uses Storage Buffers (SSBO) instead of Vertex Buffers.
+- **Bindless Texture Arrays:** Renders thousands of unique textures in a single draw call using a dynamic 2D Array.
+- **Unified 2D/3D Pipeline:** Batches 2D UI and 3D primitives (Cubes) in the same pass using degenerate triangles.
+- **Automatic Asset Scaling:** Automatically resizes loaded images to fit the texture array constraints using `SDL_ScaleSurface`.
 - **Backend Agnostic:** Works on Vulkan, Metal, D3D12 (handled by SDL3).
-- **Auto-Logging:** Automatically logs the active **Graphics Backend** and **Shader Resource Counts** to the console on startup.
-- **Clean C99:** Uses designated initializers for readable, zero-overhead pipeline creation.
 
 ## How it works
 
-Instead of binding vertex buffers for every shape, this library:
+Instead of constantly binding Vertex Buffers and swapping Textures for every shape, this library uses a modern, data-driven approach:
 
-1. Allocates one massive **Storage Buffer** on the GPU at startup.
-2. Maps a pointer to CPU memory every frame via a Transfer Buffer.
-3. Writes raw instance data (x, y, color, etc.) linearly to that pointer.
-4. Uploads everything in one go at the end of the frame.
-5. Pushes Screen Dimensions via **Uniforms** (Binding 0).
-6. Uses a **Vertex Shader** to generate geometry on the fly using `SV_VertexID`.
+1. Allocates one massive **Storage Buffer** (for geometry) and one massive **Texture Array** (for bindless images) on the GPU at startup.
+2. Maps a pointer to CPU memory every frame using a Transfer Buffer.
+3. Writes raw instance data (`x, y, z, color, texture index, etc.`) linearly to that pointer.
+4. Uploads the geometry data in one massive batch when `sgl_EndDrawing()` or a camera mode switch is triggered.
+5. Pushes calculated Camera View/Projection Matrices via **Uniforms** (Binding 0).
+6. Uses **Vertex Pulling** in the Vertex Shader to generate geometry mathematically on the fly using `gl_VertexIndex`. It uses "degenerate triangles" (snapping extra vertices to `0.0`) to seamlessly mix 6-vertex 2D quads and 36-vertex 3D cubes in the exact same draw call.
+7. Uses **Bindless-style Texture Fetching** in the Fragment Shader. The shader reads the `texIndex` from the instance data and pulls the exact image slice it needs from the global `sampler2DArray`, completely eliminating CPU-side texture binding overhead.
 
 ## SDL3 SPIR-V Resource Mapping
 
@@ -31,7 +33,7 @@ SDL3 expects SPIR-V resources to be bound in specific sets and bindings. When wr
 | :--- | :--- | :--- | :--- | :--- |
 | **Storage Buffers** | `buffer` | `set = 0` | `binding = 0` | Instance Data (Rects, Colors, Angles). Defined via `SDL_BindGPUVertexStorageBuffers`. |
 | **Uniform Buffers** | `uniform` | `set = 1` | `binding = 0` | Global Data (Screen Size, Camera). Defined via `SDL_PushGPUVertexUniformData`. |
-| **Textures** | `uniform sampler2D` | `set = 2` | `binding = 0` | (still in development) Standard Texture Sampler. |
+| **Textures** | `uniform sampler2DArray` | `set = 2` | `binding = 0` | A single massive array containing up to 256 texture layers. |
 
 ## Setup
 
@@ -49,96 +51,26 @@ Save these in a folder named `shaders/`.
 Note: This shader now accepts the Screen Size via a Uniform buffer (slot `b0`) so it handles window resizing automatically.
 
 ```glsl
-#version 450
+// ... [Input Structs] ...
 
-// --- SET 0: Instance Data (Storage Buffer) ---
-struct InstanceData {
-    vec4 rect;   // x, y, w, h
-    vec4 params; // x=angle, y=ox, z=oy, w=z-buffer
-    vec4 params2; // x=type, y=p1, z=p2, w=p3
-    vec4 color;  // r, g, b, a
-};
-
-layout(std430, set = 0, binding = 0) readonly buffer Instances {
-    InstanceData data[];
-} instances;
-
-// --- SET 1: Uniform Buffer ---
-layout(set = 1, binding = 0) uniform ScreenUniforms {
-    float screenW;
-    float screenH;
-    float camX, camY;
-    float zoom;
-    float padding; // Alignment padding
-};
-
-// --- Outputs to Fragment Shader ---
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec2 outUV;
-layout(location = 2) out float outType;
+layout(location = 2) flat out int outTexIndex;
+layout(location = 3) flat out float outType;
 
 void main() {
     InstanceData inst = instances.data[gl_InstanceIndex];
     int type = int(inst.params2.x);
-    
-    // Generate Base Geometry (0..1)
-    vec2 corner;
-    uint idx = gl_VertexIndex % 6;
-    
-    if (type == 1) { // Triangle
-        if      (idx == 0) corner = vec2(0.5, 0.0); // Top Center
-        else if (idx == 1) corner = vec2(0.0, 1.0); // Bottom Left
-        else if (idx == 2) corner = vec2(1.0, 1.0); // Bottom Right
-        else               corner = vec2(0.0, 0.0); // Degenerate
-    } else { // Rect (0) or Circle (2)
-        // Standard Quad vertices
-        if      (idx == 0) corner = vec2(0, 0);
-        else if (idx == 1) corner = vec2(0, 1);
-        else if (idx == 2) corner = vec2(1, 0);
-        else if (idx == 3) corner = vec2(1, 0);
-        else if (idx == 4) corner = vec2(0, 1);
-        else               corner = vec2(1, 1);
+
+    // UNIFIED 3D & 2D LOGIC
+    if (type == 100) { // CUBE
+        // ... [Vertex Pulling for 36-vertex Cube] ...
+    } else { // 2D SHAPE
+        // ... [Vertex Pulling for 6-vertex Quad] ...
     }
-
-    // Pass data to Fragment Shader
-    outUV = corner; 
-    outType = float(type);
-    outColor = inst.color;
-
-    // Apply Rotation (Model Space)
-    // Scale local quad by width/height (rect.zw)
-    vec2 localPos = corner * inst.rect.zw; 
     
-    // Offset by origin (pivot point)
-    localPos -= inst.params.yz; 
-    
-    // Rotate
-    float theta = inst.params.x;
-    float c = cos(theta); 
-    float s = sin(theta);
-    vec2 rotated = vec2(
-        localPos.x * c - localPos.y * s, 
-        localPos.x * s + localPos.y * c
-    );
-    
-    // Translate to World Position
-    vec2 worldPos = inst.rect.xy + rotated;
-
-    // Apply Camera (World -> Screen Space)
-    // Camera Position (camX, camY) represents the Top-Left of the screen
-    vec2 cameraPos = vec2(camX, camY);
-    
-    // Apply Pan and Zoom
-    vec2 viewPos = (worldPos - cameraPos) * zoom;
-
-    // Convert to NDC (Normalized Device Coordinates)
-    // Map 0..ScreenSize to -1..1
-    gl_Position = vec4(
-        (viewPos.x / screenW) * 2.0 - 1.0, 
-        (viewPos.y / screenH) * 2.0 - 1.0, 
-        inst.params.w, 
-        1.0
-    );
+    outTexIndex = int(inst.params2.y); // Pass texture ID to Fragment Shader
+    gl_Position = mvp * vec4(localPos, 1.0);
 }
 ```
 
@@ -147,33 +79,19 @@ void main() {
 Save this as `shaders/default.frag`
 
 ```glsl
-#version 450
+// ... [Inputs] ...
 
-// Matches Vertex Shader Output Location 0
-layout(location = 0) in vec4 inColor;
-
-// Matches Vertex Shader Output Location 1
-layout(location = 1) in vec2 inUV;
-
-// Matches Vertex Shader Output Location 2
-layout(location = 2) flat in float inType; 
-
-layout(location = 0) out vec4 outFragColor;
+// ONE BINDING TO RULE THEM ALL
+layout(set = 2, binding = 0) uniform sampler2DArray globalTextures;
 
 void main() {
-    // Type 2.0 is SGL_SHAPE_CIRCLE
-    // check > 1.5 to safely match "2" without floating point precision issues
-    if (inType > 1.5) {
-        // Circle Logic:
-        // The UVs come in from 0.0 to 1.0. 
-        // We calculate distance from the center (0.5, 0.5).
-        vec2 uv = inUV - 0.5;
-        if (length(uv) > 0.5) {
-            discard; // Cut out the corners to make a circle
-        }
+    // Bindless Texture Fetching
+    if (inTexIndex >= 0) {
+        // Z-coordinate selects the layer slice!
+        outFragColor = texture(globalTextures, vec3(inUV, float(inTexIndex))) * inColor;
+    } else {
+        outFragColor = inColor;
     }
-
-    outFragColor = inColor;
 }
 ```
 
@@ -195,31 +113,27 @@ In exactly one C file (e.g., `main.c`), define `SGL_IMPLEMENTATION` before inclu
 #include "sgl.h"
 
 int main(int argc, char** argv) {
- sgl_InitWindow(800, 800, "Simple GPU Library for SDL3");
+    sgl_InitWindow(800, 600, "SGL 2D/3D Example");
 
- SGL_Camera cam;
- sgl_CameraInit(&cam, 0.0f, 0.0f, 1.0f);
+    SGL_Camera cam2d;
+    sgl_CameraInit(&cam2d, 0.0f, 0.0f, 1.0f);
 
- // Raylib style: The loop condition handles input internally
- while (!sgl_WindowShouldClose()) {
-        
-        // Update Game Logic
-  sgl_CameraUpdate(&cam);
+    while (!sgl_WindowShouldClose()) {
+        sgl_CameraUpdate(&cam2d);
 
-        // Render
-  sgl_Begin();
-  sgl_SetCamera(&cam);
+        sgl_BeginDrawing();
 
-  sgl_DrawRectangle(10, 10, 100, 100, (SGL_COLOR){ 0, 255, 0, 255 }); 
-  sgl_DrawTriangle(400, 300, 50, (SGL_COLOR){ 255, 0, 0, 255 });
+            sgl_BeginMode2D(&cam2d);
+                sgl_DrawRectangle(10, 10, 100, 100, (SGL_COLOR){0, 255, 0, 255});
+                sgl_DrawTriangle(400, 300, 50, (SGL_COLOR){255, 0, 0, 255});
+            sgl_EndMode2D();
 
-  sgl_End();
- }
+        sgl_EndDrawing();
+    }
 
- sgl_Shutdown();
- return 0;
+    sgl_Shutdown();
+    return 0;
 }
-
 ```
 
 ### Building
@@ -263,12 +177,7 @@ now `sgl` will reports:
 
 ## Roadmap
 
-- Implement `sgl_DrawTexture(SDL_Texture* tex, x, y, w, h)`(DONE! but need refactoring later)
-
-- Add `sgl_SetCamera(x, y, zoom)` to support scrolling and zooming. (but maybe will not happen). (DONE!)
-
-- **Text Rendering:** Implement a Bitmap Font system where glyphs are treated as textured quads.
-
-- **Z-Ordering:** Add a Depth Buffer (Z-Buffer) pipeline so sprites can be drawn in any order but sorted correctly on the GPU. (there is z buffer but will need refactoring later)
-
-- **Sparse Bindless Texture arrays**: combining massive, partially resident texture with direct, shader-side access. (On Progress)
+- [x] **Bindless Textures:** Implemented `sampler2DArray` with a Free-List memory allocator.
+- [x] **3D Support:** Implemented `sgl_DrawCube` and 3D Camera support.
+- [ ] **Sprite Sheets:** Add `sgl_DrawTexturePart` (Source Rect support).
+- [ ] **Text Rendering:** Implement Bitmap Fonts using the new Texture Array system.
