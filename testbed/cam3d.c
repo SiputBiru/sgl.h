@@ -21,6 +21,8 @@ int main() {
 	uint64_t LAST = 0;
 	f32 deltaTime = 0.0f;
 
+	SGL_Texture* crateTex = sgl_LoadTexture("Tex.bmp");
+
 	while (!sgl_WindowShouldClose()) {
 		LAST = NOW;
 
@@ -32,7 +34,7 @@ int main() {
 		sgl_BeginDrawing();
 		sgl_BeginMode3D(&cam);
 
-		sgl_DrawCube((Vec3){ 0, 0, 0 }, 1.0f, (SGL_COLOR){ 255, 0, 0, 255 });
+		sgl_DrawCube((Vec3){ 0, 0, 0 }, 1.0f, crateTex, (SGL_COLOR){ 255, 255, 255, 255 });
 
 		// Draw a floor grid for reference
 		for (int x = -5; x <= 5; x++) {
@@ -40,6 +42,7 @@ int main() {
 				sgl_DrawCube(
 					(Vec3){ (f32)x, -1.0f, (f32)z },
 					0.1f,
+					NULL,
 					(SGL_COLOR){ 100, 100, 100, 255 }
 				);
 			}

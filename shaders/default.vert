@@ -41,7 +41,17 @@ void main() {
         localPos = cubeVerts[gl_VertexIndex % 36];
         localPos *= inst.rect.w; 
         localPos += inst.rect.xyz;
-        outUV = vec2(0.0);
+
+        const vec2 faceUVs[6] = vec2[6](
+          vec2(0.0, 1.0), // Bottom-Left
+          vec2(1.0, 1.0), // Bottom-Right
+          vec2(1.0, 0.0), // Top-Right
+          vec2(1.0, 0.0), // Top-Right
+          vec2(0.0, 0.0), // Top-Left
+          vec2(0.0, 1.0)  // Bottom-Left
+        );
+
+        outUV = faceUVs[gl_VertexIndex % 6];
         outColor = inst.color; // Simplify lighting for now
     } else { // 2D (Rect/Tri/Circle)
         vec2 corner;
@@ -56,7 +66,8 @@ void main() {
              else if (idx == 3) corner = vec2(1, 0); else if (idx == 4) corner = vec2(0, 1); else corner = vec2(1, 1);
         }
         
-        outUV = vec2(corner.x, 1.0 - corner.y); // Flip Y for SDL/Vulkan
+        // outUV = vec2(corner.x, 1.0 - corner.y); // Flip Y for SDL/Vulkan
+        outUV = corner;
         
         // 2D Rotation
         vec2 p = (corner * inst.rect.zw) - inst.params.yz;
