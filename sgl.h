@@ -1553,7 +1553,7 @@ void sgl_BeginDrawing(void) {
 		(SGL_InstanceData*)SDL_MapGPUTransferBuffer(sgl.device, sgl.transferBuffer, true);
 
 	// check each frame if the window size is changing and also assign depth buffer is there is none
-	// WARN: can cause segfault if not sgl_CheckResize!
+	// WARN: can cause segfault if there is sgl_CheckResize!
 	sgl_CheckResize();
 
 	// Acquire ONCE and Store it
@@ -1585,7 +1585,6 @@ void sgl_BeginDrawing(void) {
 		};
 		SDL_GPURenderPass* pass =
 
-			// WARN: Render Pass SegFault
 			SDL_BeginGPURenderPass(sgl.curCmd, &colorTargetInfo, 1, &depthTargetInfo);
 		SDL_EndGPURenderPass(pass);
 	}
