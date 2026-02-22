@@ -56,6 +56,11 @@ typedef enum {
 	CAMERA_ORBITAL,
 } SGL_CAMERA_MODE;
 
+typedef enum {
+	CAMERA_PERSPECTIVE = 0, // Perspective projection
+	CAMERA_ORTHOGRAPHIC		// Orthographic projection
+} SGL_CAMERA_PERSPECTIVE;
+
 typedef struct {
 	f32 x, y;
 	f32 zoom;
@@ -63,10 +68,10 @@ typedef struct {
 
 typedef struct {
 	Vec3 position;
-	Vec3 target; // Where the camera is looking
+	Vec3 target;
 	Vec3 up;
 	f32 fovy;
-	int projection; // 0 = Perspective, 1 = Orthographic
+	int projection; // Camera projection type: CAMERA_PERSPECTIVE or CAMERA_ORTHOGRAPHIC
 
 	f32 speed;
 } SGL_Camera3D;
@@ -881,7 +886,7 @@ static SGL_Matrix sgl_MatOrtho(f32 left, f32 right, f32 bottom, f32 top, f32 nea
 }
 
 static SGL_Matrix sgl_MatPerspective(f64 fovy, f64 aspect, f64 near, f64 far) {
-	double tanHalfFovy = tan(fovy * 0.5 * 0.017453292519943295769236907684886);
+	f64 tanHalfFovy = tan(fovy * 0.5 * 0.017453292519943295769236907684886);
 	SGL_Matrix result = { 0 };
 
 	result.m[0] = 1.0f / (aspect * tanHalfFovy);
