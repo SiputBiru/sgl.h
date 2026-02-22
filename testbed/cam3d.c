@@ -1,3 +1,5 @@
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_keyboard.h>
 #include <stdint.h>
 #define SGL_IMPLEMENTATION
 #include "../sgl.h"
@@ -14,8 +16,11 @@ int main() {
 	cam.projection = 0; // Perspective
 	cam.speed = 5.0f;
 
+	bool isMouseLocked = true;
+	bool tabWasDown = false;
+
 	// IMPORTANT: Lock/Hide mouse for 3D controls
-	sgl_SetMouseLock(true);
+	sgl_SetMouseLock(isMouseLocked);
 
 	uint64_t NOW = sgl_GetPerfCount();
 	uint64_t LAST = 0;
@@ -29,10 +34,22 @@ int main() {
 		NOW = sgl_GetPerfCount();
 		deltaTime = (f32)((NOW - LAST) / (double)sgl_GetPerfFreq());
 		// Update Camera
-		sgl_Camera3DUpdate(&cam, CAMERA_ORBITAL, deltaTime);
+
+		const bool* keys = SDL_GetKeyboardState(NULL);
+		bool tabIsDown = keys[SDL_SCANCODE_TAB];
+
+		if (tabIsDown && !tabWasDown) {
+			isMouseLocked = !isMouseLocked;
+			sgl_SetMouseLock(isMouseLocked);
+		}
+		tabWasDown = tabIsDown;
 
 		sgl_BeginDrawing();
 		sgl_BeginMode3D(&cam);
+
+		if (isMouseLocked) {
+			sgl_Camera3DUpdate(&cam, CAMERA_FREE, deltaTime);
+		}
 
 		sgl_DrawCube((Vec3){ 0, 0, 0 }, 1.0f, crateTex, (SGL_COLOR){ 255, 255, 255, 255 });
 
