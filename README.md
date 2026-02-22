@@ -192,6 +192,39 @@ int main(int argc, char** argv) {
 }
 ```
 
+### Frustum culling
+
+we can use sgl built in **frustum culling** by get the current View-Projection matrix and extract planes. then loop through the massive grid(or somthing else) then test bounding sphere (`Radius 1.5 is safe for a 1.0 size cube`).
+
+- Example:
+
+```C
+        // Inside main loop
+        sgl_BeginDrawing();
+        sgl_BeginMode3D(&cam);
+
+        SGL_Frustum frustum;
+        sgl_ExtractFrustum(sgl_GetCurrentMatrix(), &frustum);
+
+        int cubesDrawn = 0;
+
+        for (int x = -50; x < 50; x++) {
+            for (int z = -50; z < 50; z++) {
+                Vec3 cubePos = { (f32)x * 2.0f, 0.0f, (f32)z * 2.0f };
+                if (sgl_FrustumContainsSphere(&frustum, cubePos, 1.5f)) {
+                    sgl_DrawCube(cubePos, 1.0f, NULL, (SGL_COLOR){0, 255, 0, 255});
+                    cubesDrawn++;
+                }
+            }
+        }
+
+        sgl_EndMode3D();
+        sgl_EndDrawing();
+        
+        // Print to see how many cubes were actually pushed to the GPU
+        // SGL_Log("Cubes Drawn: %d / 10000", cubesDrawn);
+```
+
 ### Building
 
 Link against SDL3 and the math library

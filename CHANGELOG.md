@@ -5,6 +5,13 @@
 - **Planned:** 3D Primitive Rendering (Sphere, Cylinder)
 - **Planned:** Source Rectangle Support (Sprite Sheets)
 
+### [2026-02-22] - Bindless Textures & VRAM Management
+
+#### Added
+
+- **Frustum culling**: creating new API for Frustum culling `sgl_ExtractFrustum` for getting the frustum and also `sgl_FrustumContainsSphere` to check if a sphere is completely outside any of the 6 planes
+- **Get Current Matrix**: to get sgl.currentMatrix we can use `sgl_GetCurrentMatrix` tha return `SGL_Matrix`
+
 ### [2026-02-21] - Bindless Textures & VRAM Management
 
 #### Added

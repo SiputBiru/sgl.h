@@ -41,6 +41,15 @@ typedef struct {
 	f32 x, y, w, h;
 } Rectangle;
 
+typedef struct {
+	Vec3 normal;
+	f32 d;
+} SGL_Plane;
+
+typedef struct {
+	SGL_Plane planes[6];
+} SGL_Frustum;
+
 typedef enum {
 	CAMERA_CUSTOM = 0,
 	CAMERA_FREE,
@@ -96,6 +105,10 @@ void sgl_EndMode2D(void);
 void sgl_BeginMode3D(SGL_Camera3D* camera);
 void sgl_EndMode3D(void);
 
+// Frustum API
+void sgl_ExtractFrustum(SGL_Matrix vp, SGL_Frustum* f);
+bool sgl_FrustumContainsSphere(SGL_Frustum* frustum, Vec3 center, f32 radius);
+
 // Draw Shapes
 
 // 2D Shapes
@@ -128,6 +141,9 @@ void sgl_Camera3DUpdate(SGL_Camera3D* cam, SGL_CAMERA_MODE mode, f32 deltaTime);
 // Performance Counter
 uint64_t sgl_GetPerfCount(void);
 uint64_t sgl_GetPerfFreq(void);
+
+// utils
+SGL_Matrix sgl_GetCurrentMatrix(void);
 
 #endif // SGL_H
 
@@ -757,6 +773,178 @@ const static uint8_t default_frag[] = {
 
 // --- Helper Functions ---
 
+// Tiny Math Helper function
+
+static Vec3 sgl_Vec3Add(Vec3 v1, Vec3 v2) {
+	return (Vec3){
+		v1.x + v2.x,
+		v1.y + v2.y,
+		v1.z + v2.z,
+	};
+}
+
+static Vec3 sgl_Vec3Sub(Vec3 v1, Vec3 v2) {
+	return (Vec3){
+		v1.x - v2.x,
+		v1.y - v2.y,
+		v1.z - v2.z,
+	};
+}
+
+static Vec3 sgl_Vec3Scale(Vec3 v1, f32 s) {
+	return (Vec3){
+		v1.x * s,
+		v1.y * s,
+		v1.z * s,
+	};
+}
+
+static f32 sgl_q_rsqrt(f32 num) {
+	uint32_t i;
+	f32 x2, y;
+	const f32 threehalfs = 1.5f;
+
+	x2 = num * 0.5f;
+	y = num;
+	i = *(uint32_t*)&y;		   // evil floating point bit hack
+	i = 0x5f3759df - (i >> 1); // what the...
+	y = *(f32*)&i;
+	y = y * (threehalfs - (x2 * y * y)); // 1st iteration
+	y = y * (threehalfs - (x2 * y * y)); // 2st iteration can be removed
+
+	return y;
+}
+
+static f32 sgl_sqrt(f32 num) {
+	if (num == 0)
+		return 0;
+	return num * sgl_q_rsqrt(num);
+}
+
+static inline f32 sgl_Vec3LengthSquared(Vec3 v) { return (v.x * v.x) + (v.y * v.y) + (v.z * v.z); }
+
+static f32 sgl_Vec3length(Vec3 v) {
+	f32 ls = sgl_Vec3LengthSquared(v);
+
+	if (ls == 0) {
+		return 0.0f;
+	}
+
+	return ls * sgl_q_rsqrt(ls);
+}
+
+static Vec3 sgl_Vec3Normalize(Vec3 v) {
+	f32 len = sgl_Vec3length(v);
+	if (len == 0) {
+		return (Vec3){ 0, 0, 0 };
+	}
+
+	return (Vec3){
+		v.x / len,
+		v.y / len,
+		v.z / len,
+	};
+}
+
+static Vec3 sgl_Vec3Cross(Vec3 v1, Vec3 v2) {
+	return (Vec3){
+		v1.y * v2.z - v1.z * v2.y,
+		v1.z * v2.x - v1.x * v2.z,
+		v1.x * v2.y - v1.y * v2.x,
+	};
+}
+
+static SGL_Matrix sgl_MatIndentity(void) {
+	SGL_Matrix result = { 0 };
+	result.m[0] = 1.0f;
+	result.m[5] = 1.0f;
+	result.m[10] = 1.0f;
+	result.m[15] = 1.0f;
+	return result;
+}
+
+static SGL_Matrix sgl_MatOrtho(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
+	SGL_Matrix result = { 0 };
+
+	result.m[0] = 2.0f / (right - left);
+	result.m[5] = 2.0f / (top - bottom);
+	result.m[10] =
+		1.0f /
+		(near -
+		 far); // SDL_GPU / Vulkan usually uses 0 to 1 depth, OpenGL -1 to 1.
+			   // SDL3 Shader Cross compiler standardizes this, usually OpenGL conventions in GLSL.
+	result.m[12] = -(right + left) / (right - left);
+	result.m[13] = -(top + bottom) / (top - bottom);
+	result.m[14] = near / (near - far);
+	result.m[15] = 1.0f;
+	return result;
+}
+
+static SGL_Matrix sgl_MatPerspective(f64 fovy, f64 aspect, f64 near, f64 far) {
+	double tanHalfFovy = tan(fovy * 0.5 * 0.017453292519943295769236907684886);
+	SGL_Matrix result = { 0 };
+
+	result.m[0] = 1.0f / (aspect * tanHalfFovy);
+	result.m[5] = 1.0f / tanHalfFovy;  // Keep Y-Up for now to match your shader expectations
+	result.m[10] = far / (near - far); // SDL3/Vulkan Depth [0, 1]
+	result.m[11] = -1.0f;
+	result.m[14] = (far * near) / (near - far);
+
+	return result;
+}
+
+static SGL_Matrix sgl_MatLookAt(Vec3 eye, Vec3 target, Vec3 up) {
+	Vec3 z = { eye.x - target.x, eye.y - target.y, eye.z - target.z };
+	float len = sqrtf(z.x * z.x + z.y * z.y + z.z * z.z);
+	if (len > 0) {
+		z.x /= len;
+		z.y /= len;
+		z.z /= len;
+	}
+
+	Vec3 x = { up.y * z.z - up.z * z.y, up.z * z.x - up.x * z.z, up.x * z.y - up.y * z.x }; // cross
+	len = sqrtf(x.x * x.x + x.y * x.y + x.z * x.z);
+	if (len > 0) {
+		x.x /= len;
+		x.y /= len;
+		x.z /= len;
+	}
+
+	Vec3 y = { z.y * x.z - z.z * x.y, z.z * x.x - z.x * x.z, z.x * x.y - z.y * x.x }; // cross
+
+	SGL_Matrix result = { 0 };
+	result.m[0] = x.x;
+	result.m[4] = x.y;
+	result.m[8] = x.z;
+	result.m[1] = y.x;
+	result.m[5] = y.y;
+	result.m[9] = y.z;
+	result.m[2] = z.x;
+	result.m[6] = z.y;
+	result.m[10] = z.z;
+	result.m[3] = 0.0f;
+	result.m[7] = 0.0f;
+	result.m[11] = 0.0f;
+	result.m[12] = -(x.x * eye.x + x.y * eye.y + x.z * eye.z);
+	result.m[13] = -(y.x * eye.x + y.y * eye.y + y.z * eye.z);
+	result.m[14] = -(z.x * eye.x + z.y * eye.y + z.z * eye.z);
+	result.m[15] = 1.0f;
+	return result;
+}
+
+static SGL_Matrix sgl_MatMultiply(SGL_Matrix left, SGL_Matrix right) {
+	SGL_Matrix result = { 0 };
+	for (int col = 0; col < 4; col++) {
+		for (int row = 0; row < 4; row++) {
+			float sum = 0.0f;
+			for (int i = 0; i < 4; i++)
+				sum += left.m[i * 4 + row] * right.m[col * 4 + i];
+			result.m[col * 4 + row] = sum;
+		}
+	}
+	return result;
+}
+
 // LOGS
 static void
 sgl_LogOutputFunction(void* userdata, int category, SDL_LogPriority priority, const char* message) {
@@ -1001,182 +1189,82 @@ static void sgl_PushInstance(
 	};
 }
 
-// Tiny Math Helper function
-
-static Vec3 sgl_Vec3Add(Vec3 v1, Vec3 v2) {
-	return (Vec3){
-		v1.x + v2.x,
-		v1.y + v2.y,
-		v1.z + v2.z,
-	};
-}
-
-static Vec3 sgl_Vec3Sub(Vec3 v1, Vec3 v2) {
-	return (Vec3){
-		v1.x - v2.x,
-		v1.y - v2.y,
-		v1.z - v2.z,
-	};
-}
-
-static Vec3 sgl_Vec3Scale(Vec3 v1, f32 s) {
-	return (Vec3){
-		v1.x * s,
-		v1.y * s,
-		v1.z * s,
-	};
-}
-
-static f32 sgl_q_rsqrt(f32 num) {
-	uint32_t i;
-	f32 x2, y;
-	const f32 threehalfs = 1.5f;
-
-	x2 = num * 0.5f;
-	y = num;
-	i = *(uint32_t*)&y;		   // evil floating point bit hack
-	i = 0x5f3759df - (i >> 1); // what the...
-	y = *(f32*)&i;
-	y = y * (threehalfs - (x2 * y * y)); // 1st iteration
-	y = y * (threehalfs - (x2 * y * y)); // 2st iteration can be removed
-
-	return y;
-}
-
-static f32 sgl_sqrt(f32 num) {
-	if (num == 0)
-		return 0;
-	return num * sgl_q_rsqrt(num);
-}
-
-static inline f32 sgl_Vec3LengthSquared(Vec3 v) { return (v.x * v.x) + (v.y * v.y) + (v.z * v.z); }
-
-static f32 sgl_Vec3length(Vec3 v) {
-	f32 ls = sgl_Vec3LengthSquared(v);
-
-	if (ls == 0) {
-		return 0.0f;
-	}
-
-	return ls * sgl_q_rsqrt(ls);
-}
-
-static Vec3 sgl_Vec3Normalize(Vec3 v) {
-	f32 len = sgl_Vec3length(v);
-	if (len == 0) {
-		return (Vec3){ 0, 0, 0 };
-	}
-
-	return (Vec3){
-		v.x / len,
-		v.y / len,
-		v.z / len,
-	};
-}
-
-static Vec3 sgl_Vec3Cross(Vec3 v1, Vec3 v2) {
-	return (Vec3){
-		v1.y * v2.z - v1.z * v2.y,
-		v1.z * v2.x - v1.x * v2.z,
-		v1.x * v2.y - v1.y * v2.x,
-	};
-}
-
-static SGL_Matrix sgl_MatIndentity(void) {
-	SGL_Matrix result = { 0 };
-	result.m[0] = 1.0f;
-	result.m[5] = 1.0f;
-	result.m[10] = 1.0f;
-	result.m[15] = 1.0f;
-	return result;
-}
-
-static SGL_Matrix sgl_MatOrtho(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
-	SGL_Matrix result = { 0 };
-
-	result.m[0] = 2.0f / (right - left);
-	result.m[5] = 2.0f / (top - bottom);
-	result.m[10] =
-		1.0f /
-		(near -
-		 far); // SDL_GPU / Vulkan usually uses 0 to 1 depth, OpenGL -1 to 1.
-			   // SDL3 Shader Cross compiler standardizes this, usually OpenGL conventions in GLSL.
-	result.m[12] = -(right + left) / (right - left);
-	result.m[13] = -(top + bottom) / (top - bottom);
-	result.m[14] = near / (near - far);
-	result.m[15] = 1.0f;
-	return result;
-}
-
-static SGL_Matrix sgl_MatPerspective(f64 fovy, f64 aspect, f64 near, f64 far) {
-	double tanHalfFovy = tan(fovy * 0.5 * 0.017453292519943295769236907684886);
-	SGL_Matrix result = { 0 };
-
-	result.m[0] = 1.0f / (aspect * tanHalfFovy);
-	result.m[5] = 1.0f / tanHalfFovy;  // Keep Y-Up for now to match your shader expectations
-	result.m[10] = far / (near - far); // SDL3/Vulkan Depth [0, 1]
-	result.m[11] = -1.0f;
-	result.m[14] = (far * near) / (near - far);
-
-	return result;
-}
-
-static SGL_Matrix sgl_MatLookAt(Vec3 eye, Vec3 target, Vec3 up) {
-	Vec3 z = { eye.x - target.x, eye.y - target.y, eye.z - target.z };
-	float len = sqrtf(z.x * z.x + z.y * z.y + z.z * z.z);
-	if (len > 0) {
-		z.x /= len;
-		z.y /= len;
-		z.z /= len;
-	}
-
-	Vec3 x = { up.y * z.z - up.z * z.y, up.z * z.x - up.x * z.z, up.x * z.y - up.y * z.x }; // cross
-	len = sqrtf(x.x * x.x + x.y * x.y + x.z * x.z);
-	if (len > 0) {
-		x.x /= len;
-		x.y /= len;
-		x.z /= len;
-	}
-
-	Vec3 y = { z.y * x.z - z.z * x.y, z.z * x.x - z.x * x.z, z.x * x.y - z.y * x.x }; // cross
-
-	SGL_Matrix result = { 0 };
-	result.m[0] = x.x;
-	result.m[4] = x.y;
-	result.m[8] = x.z;
-	result.m[1] = y.x;
-	result.m[5] = y.y;
-	result.m[9] = y.z;
-	result.m[2] = z.x;
-	result.m[6] = z.y;
-	result.m[10] = z.z;
-	result.m[3] = 0.0f;
-	result.m[7] = 0.0f;
-	result.m[11] = 0.0f;
-	result.m[12] = -(x.x * eye.x + x.y * eye.y + x.z * eye.z);
-	result.m[13] = -(y.x * eye.x + y.y * eye.y + y.z * eye.z);
-	result.m[14] = -(z.x * eye.x + z.y * eye.y + z.z * eye.z);
-	result.m[15] = 1.0f;
-	return result;
-}
-
-static SGL_Matrix sgl_MatMultiply(SGL_Matrix left, SGL_Matrix right) {
-	SGL_Matrix result = { 0 };
-	for (int col = 0; col < 4; col++) {
-		for (int row = 0; row < 4; row++) {
-			float sum = 0.0f;
-			for (int i = 0; i < 4; i++)
-				sum += left.m[i * 4 + row] * right.m[col * 4 + i];
-			result.m[col * 4 + row] = sum;
-		}
-	}
-	return result;
-}
-
 // Performance / utils API
 uint64_t sgl_GetPerfCount(void) { return SDL_GetPerformanceCounter(); }
 
 uint64_t sgl_GetPerfFreq(void) { return SDL_GetPerformanceFrequency(); }
+
+// Frustum Culling
+static void sgl_NormalizePlane(SGL_Plane* p) {
+	f32 mag =
+		sgl_sqrt(p->normal.x * p->normal.x + p->normal.y * p->normal.y + p->normal.z * p->normal.z);
+	if (mag > 0.0f) {
+		p->normal.x /= mag;
+		p->normal.y /= mag;
+		p->normal.z /= mag;
+		p->d /= mag;
+	}
+}
+
+SGL_Matrix sgl_GetCurrentMatrix(void) { return sgl.currentMatrix; }
+
+void sgl_ExtractFrustum(SGL_Matrix vp, SGL_Frustum* f) {
+	// Left Plane (Row 3 + Row 0)
+	f->planes[0].normal.x = vp.m[3] + vp.m[0];
+	f->planes[0].normal.y = vp.m[7] + vp.m[4];
+	f->planes[0].normal.z = vp.m[11] + vp.m[8];
+	f->planes[0].d = vp.m[15] + vp.m[12];
+
+	// Right Plane (Row 3 - Row 0)
+	f->planes[1].normal.x = vp.m[3] - vp.m[0];
+	f->planes[1].normal.y = vp.m[7] - vp.m[4];
+	f->planes[1].normal.z = vp.m[11] - vp.m[8];
+	f->planes[1].d = vp.m[15] - vp.m[12];
+
+	// Bottom Plane (Row 3 + Row 1)
+	f->planes[2].normal.x = vp.m[3] + vp.m[1];
+	f->planes[2].normal.y = vp.m[7] + vp.m[5];
+	f->planes[2].normal.z = vp.m[11] + vp.m[9];
+	f->planes[2].d = vp.m[15] + vp.m[13];
+
+	// Top Plane (Row 3 - Row 1)
+	f->planes[3].normal.x = vp.m[3] - vp.m[1];
+	f->planes[3].normal.y = vp.m[7] - vp.m[5];
+	f->planes[3].normal.z = vp.m[11] - vp.m[9];
+	f->planes[3].d = vp.m[15] - vp.m[13];
+
+	// Near Plane (Row 2 for Vulkan/SDL3 [0, 1] depth range)
+	f->planes[4].normal.x = vp.m[2];
+	f->planes[4].normal.y = vp.m[6];
+	f->planes[4].normal.z = vp.m[10];
+	f->planes[4].d = vp.m[14];
+
+	// Far Plane (Row 3 - Row 2)
+	f->planes[5].normal.x = vp.m[3] - vp.m[2];
+	f->planes[5].normal.y = vp.m[7] - vp.m[6];
+	f->planes[5].normal.z = vp.m[11] - vp.m[10];
+	f->planes[5].d = vp.m[15] - vp.m[14];
+
+	// Normalize all planes
+	for (int i = 0; i < 6; i++) {
+		sgl_NormalizePlane(&f->planes[i]);
+	}
+}
+
+// Check if a sphere is completely outside any of the 6 planes
+bool sgl_FrustumContainsSphere(SGL_Frustum* f, Vec3 center, f32 radius) {
+	for (int i = 0; i < 6; i++) {
+		// Distance from the point to the plane
+		f32 dist = (f->planes[i].normal.x * center.x) + (f->planes[i].normal.y * center.y) +
+				   (f->planes[i].normal.z * center.z) + f->planes[i].d;
+
+		// If the distance is less than negative radius, it is completely outside
+		if (dist < -radius) {
+			return false;
+		}
+	}
+	return true;
+}
 
 // Texture API
 SGL_Texture* sgl_CreateTexture(void* pixels, int width, int height) {
