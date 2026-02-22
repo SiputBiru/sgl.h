@@ -12,6 +12,7 @@ I wrote this to test the concepts from Mason Ramali's "It's Not About The API" t
 - **Unified 2D/3D Pipeline:** Batches 2D UI and 3D primitives (Cubes) in the same pass using degenerate triangles.
 - **Automatic Asset Scaling:** Automatically resizes loaded images to fit the texture array constraints using `SDL_ScaleSurface`.
 - **Backend Agnostic:** Works on Vulkan, Metal, D3D12 (handled by SDL3).
+- **Simple Frustum Culling**: Ignoring anything that falls outside the camera's field of view("frustum").
 
 ## How it works
 

@@ -10,7 +10,7 @@
 #### Added
 
 - **Frustum culling**: creating new API for Frustum culling `sgl_ExtractFrustum` for getting the frustum and also `sgl_FrustumContainsSphere` to check if a sphere is completely outside any of the 6 planes
-- **Get Current Matrix**: to get sgl.currentMatrix we can use `sgl_GetCurrentMatrix` tha return `SGL_Matrix`
+- **Get Current Matrix**: to get `sgl.currentMatrix` we can use `sgl_GetCurrentMatrix()` that return `SGL_Matrix`
 
 ### [2026-02-21] - Bindless Textures & VRAM Management
 
