@@ -10,6 +10,7 @@
 #### Added
 
 - **Added backface culling**: `SDL_GPURasterizerState rasterState` to determine the front face `SDL_GPU_FRONTFACE_CLOCKWISE`.
+- **Added IO stream**: for loadind the image png from binary format using `sgl_loadTextureIO` the LoadTextureIO needs the binary array of uint8_t and also the size of the array to work. Returning `SGL_Texture*` just like `sgl_LoadTexture`.
 
 ### [2026-02-22] - Bindless Textures & VRAM Management
 

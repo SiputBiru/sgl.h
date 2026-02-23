@@ -1,7 +1,8 @@
 /*
 	sgl.h - Simple Graphics Library for SDL3
   single-header C99 library built on top of SDL3 that implements a vertex pulling rendering backend
-  and a modern, bindless batching approach for 2D/3D rendering.
+  and a modern, bindless batching approach for 2D/3D rendering. And also with immediate API inspired
+  by Raylib
 */
 
 #ifndef SGL_H
@@ -91,6 +92,7 @@ void sgl_Shutdown(void);
 // Texture API
 SGL_Texture* sgl_CreateTexture(void* pixels, int width, int height);
 SGL_Texture* sgl_LoadTexture(const char* filename); // Uses SDL_LoadBMP
+SGL_Texture* sgl_loadTextureIO(const uint8_t* data, size_t size);
 void sgl_DestroyTexture(SGL_Texture* texture);
 void sgl_DrawTexture(SGL_Texture* texture, f32 x, f32 y, f32 w, f32 h, SGL_COLOR tint);
 
@@ -1279,6 +1281,39 @@ bool sgl_FrustumContainsSphere(SGL_Frustum* f, Vec3 center, f32 radius) {
 	return true;
 }
 
+// --- INTERNAL TEXTURE & SURFACE FUNCTION ---
+// Converting all the surface that given to SGL_TEXTURE_SIZE
+static SDL_Surface* sgl_ConvertSurface(SDL_Surface* originalSurf) {
+
+	SDL_Surface* rgbaSurf = SDL_ConvertSurface(originalSurf, SDL_PIXELFORMAT_RGBA32);
+	if (!rgbaSurf) {
+		SGL_Error("Failed to convert image to RGBA32: %s", SDL_GetError());
+		return NULL;
+	}
+
+	SDL_Surface* finalSurf = rgbaSurf;
+
+	if (rgbaSurf->w != SGL_TEXTURE_SIZE || rgbaSurf->h != SGL_TEXTURE_SIZE) {
+		finalSurf =
+			SDL_ScaleSurface(rgbaSurf, SGL_TEXTURE_SIZE, SGL_TEXTURE_SIZE, SDL_SCALEMODE_NEAREST);
+
+		if (!finalSurf) {
+			SGL_Error("Failed to scale surface %p: %s", (void*)originalSurf, SDL_GetError());
+			SDL_DestroySurface(rgbaSurf);
+			return NULL;
+		}
+
+		// Destroy the intermediate unscaled RGBA surface and the originalSurf
+		SDL_DestroySurface(originalSurf);
+		SDL_DestroySurface(rgbaSurf);
+	} else {
+		// Destroy the originalSurf
+		SDL_DestroySurface(originalSurf);
+	}
+
+	return finalSurf;
+}
+
 // Texture API
 SGL_Texture* sgl_CreateTexture(void* pixels, int width, int height) {
 
@@ -1346,6 +1381,31 @@ SGL_Texture* sgl_CreateTexture(void* pixels, int width, int height) {
 	return wrapper;
 }
 
+SGL_Texture* sgl_loadTextureIO(const uint8_t* data, size_t size) {
+	SDL_IOStream* io = SDL_IOFromConstMem(data, size);
+	if (!io) {
+		SGL_Error("Failed to create IOStream: %s", SDL_GetError());
+		return NULL;
+	}
+
+	SDL_Surface* surface = SDL_LoadPNG_IO(io, true);
+	if (!surface) {
+		SGL_Error("Failed to load PNG: %s", SDL_GetError());
+		return NULL;
+	}
+
+	SDL_Surface* finalSurf = sgl_ConvertSurface(surface);
+
+	SGL_Texture* tex = sgl_CreateTexture(finalSurf->pixels, finalSurf->w, finalSurf->h);
+	if (tex) {
+		tex->width = (f32)finalSurf->w;
+		tex->height = (f32)finalSurf->h;
+	}
+	SDL_DestroySurface(finalSurf);
+
+	return tex;
+}
+
 SGL_Texture* sgl_LoadTexture(const char* filename) {
 
 	// currently Supported format is bmp and png
@@ -1355,33 +1415,12 @@ SGL_Texture* sgl_LoadTexture(const char* filename) {
 		return NULL;
 	}
 
-	SDL_Surface* rgbaSurf = SDL_ConvertSurface(originalSurf, SDL_PIXELFORMAT_RGBA32);
-	SDL_DestroySurface(originalSurf);
-	if (!rgbaSurf) {
-		SGL_Error("Failed to convert image to RGBA32: %s", SDL_GetError());
-		return NULL;
-	}
-
-	SDL_Surface* finalSurf = rgbaSurf;
-
-	if (rgbaSurf->w != SGL_TEXTURE_SIZE || rgbaSurf->h != SGL_TEXTURE_SIZE) {
-		finalSurf =
-			SDL_ScaleSurface(rgbaSurf, SGL_TEXTURE_SIZE, SGL_TEXTURE_SIZE, SDL_SCALEMODE_NEAREST);
-
-		if (!finalSurf) {
-			SGL_Error("Failed to scale image %s: %s", filename, SDL_GetError());
-			SDL_DestroySurface(rgbaSurf);
-			return NULL;
-		}
-
-		// Destroy the intermediate unscaled RGBA surface
-		SDL_DestroySurface(rgbaSurf);
-	}
+	SDL_Surface* finalSurf = sgl_ConvertSurface(originalSurf);
 
 	SGL_Texture* tex = sgl_CreateTexture(finalSurf->pixels, finalSurf->w, finalSurf->h);
 	if (tex) {
-		tex->width = (f32)rgbaSurf->w;
-		tex->height = (f32)rgbaSurf->h;
+		tex->width = (f32)finalSurf->w;
+		tex->height = (f32)finalSurf->h;
 	}
 
 	SDL_DestroySurface(finalSurf);
@@ -1810,7 +1849,8 @@ void sgl_InitWindow(int w, int h, const char* title) {
 
 	// Initialize GPU with standard SPIR-V format support, this makes SDL3
 	// will be using Vulkan By default
-	SDL_GPUDevice* dev = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
+	// SDL_GPUDevice* dev = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
+	SDL_GPUDevice* dev = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, NULL);
 
 	sgl_InternalInit(win, dev);
 }
