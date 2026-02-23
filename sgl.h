@@ -1489,6 +1489,12 @@ SDL_GPUGraphicsPipeline* sgl_CreatePipeline(SDL_GPUShader* vert, SDL_GPUShader* 
 		.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL,
 	};
 
+	// rasterizer_state to determine front face things and backface culling things
+	SDL_GPURasterizerState rasterState = {
+		.cull_mode = SDL_GPU_CULLMODE_FRONT,
+		.front_face = SDL_GPU_FRONTFACE_CLOCKWISE,
+	};
+
 	SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {
 		.vertex_shader = vert,
 		.fragment_shader = frag,
