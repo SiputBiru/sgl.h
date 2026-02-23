@@ -7,6 +7,8 @@
 #define SGL_H
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_surface.h>
+
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -175,6 +177,7 @@ typedef enum {
 	SGL_SHAPE_RECT = 0,
 	SGL_SHAPE_TRIG = 1,
 	SGL_SHAPE_CIRCLE = 2,
+	SGL_SHAPE_CUBE = 100,
 } SGL_ShapeType;
 
 typedef enum {
@@ -998,6 +1001,7 @@ sgl_LogOutputFunction(void* userdata, int category, SDL_LogPriority priority, co
 	}
 }
 
+// --- Camera Stuff ---
 static void sgl_SetViewport(SDL_GPURenderPass* pass) {
 	int physW, physH;
 	SDL_GetWindowSizeInPixels(sgl.window, &physW, &physH);
@@ -1041,6 +1045,7 @@ static void sgl_CheckResize(void) {
 	}
 }
 
+// --- Shader Stuff ----
 static SDL_GPUShader* sgl_CreateShaderFromBytes(
 	const uint8_t* code,
 	size_t size,
@@ -1151,6 +1156,7 @@ static void sgl_Flush(void) {
 	sgl.mappedPtr = (SGL_InstanceData*)newPtr;
 }
 
+// The Main way to Instance Data
 static void sgl_PushInstance(
 	f32 x,
 	f32 y,
@@ -1161,6 +1167,7 @@ static void sgl_PushInstance(
 	f32 oy,
 	f32 z,
 	int type,
+	SGL_Texture* texture,
 	SGL_COLOR color
 ) {
 	if (sgl.instanceCount >= SGL_MAX_INSTANCES) {
@@ -1171,6 +1178,8 @@ static void sgl_PushInstance(
 		SGL_Error("preventing writing to NULL cause flush is failed %s", SDL_GetError());
 		return;
 	}
+
+	f32 texIndex = (texture != NULL) ? (float)texture->id : -1.0f;
 
 	// Now safe to write because Flush() reset instanceCount and remapped the pointer
 	sgl.mappedPtr[sgl.instanceCount++] = (SGL_InstanceData){
@@ -1183,8 +1192,7 @@ static void sgl_PushInstance(
 		.oy = oy,
 		.z = z,
 		.type = (f32)type,
-		// .texIndex = 0,
-		.texIndex = -1.0f,
+		.texIndex = texIndex,
 		.p2 = 0,
 		.p3 = 0,
 		.r = color.r / 255.0f,
@@ -1199,6 +1207,8 @@ uint64_t sgl_GetPerfCount(void) { return SDL_GetPerformanceCounter(); }
 
 uint64_t sgl_GetPerfFreq(void) { return SDL_GetPerformanceFrequency(); }
 
+SGL_Matrix sgl_GetCurrentMatrix(void) { return sgl.currentMatrix; }
+
 // Frustum Culling
 static void sgl_NormalizePlane(SGL_Plane* p) {
 	f32 mag =
@@ -1210,8 +1220,6 @@ static void sgl_NormalizePlane(SGL_Plane* p) {
 		p->d /= mag;
 	}
 }
-
-SGL_Matrix sgl_GetCurrentMatrix(void) { return sgl.currentMatrix; }
 
 void sgl_ExtractFrustum(SGL_Matrix vp, SGL_Frustum* f) {
 	// Left Plane (Row 3 + Row 0)
@@ -1339,7 +1347,9 @@ SGL_Texture* sgl_CreateTexture(void* pixels, int width, int height) {
 }
 
 SGL_Texture* sgl_LoadTexture(const char* filename) {
-	SDL_Surface* originalSurf = SDL_LoadBMP(filename);
+
+	// currently Supported format is bmp and png
+	SDL_Surface* originalSurf = SDL_LoadSurface(filename);
 	if (!originalSurf) {
 		SGL_Error("Failed to load image: %s, error: %s", filename, SDL_GetError());
 		return NULL;
@@ -1393,9 +1403,9 @@ void sgl_DrawTexture(SGL_Texture* texture, f32 x, f32 y, f32 w, f32 h, SGL_COLOR
 	if (!texture)
 		return;
 
-	sgl_PushInstance(x, y, w, h, 0, 0, 0, 0.0f, SGL_SHAPE_RECT, tint);
+	sgl_PushInstance(x, y, w, h, 0, 0, 0, 0.0f, SGL_SHAPE_RECT, texture, tint);
 
-	sgl.mappedPtr[sgl.instanceCount - 1].texIndex = (f32)texture->id;
+	// sgl.mappedPtr[sgl.instanceCount - 1].texIndex = (f32)texture->id;
 }
 
 // --- Shader API ---
@@ -1845,7 +1855,7 @@ SDL_GPUGraphicsPipeline* sgl_GetDefaultPipeline(void) { return sgl.defaultPipeli
 
 // Draw Shapes
 void sgl_DrawRectangle(f32 x, f32 y, f32 w, f32 h, SGL_COLOR color) {
-	sgl_PushInstance(x, y, w, h, 0, 0, 0, -99.0f, SGL_SHAPE_RECT, color);
+	sgl_PushInstance(x, y, w, h, 0, 0, 0, -99.0f, SGL_SHAPE_RECT, NULL, color);
 }
 
 void sgl_DrawRectanglePro(Rectangle rec, Vec2 origin, f32 rotation, SGL_COLOR color) {
@@ -1859,12 +1869,13 @@ void sgl_DrawRectanglePro(Rectangle rec, Vec2 origin, f32 rotation, SGL_COLOR co
 		origin.y,
 		0,
 		SGL_SHAPE_RECT,
+		NULL,
 		color
 	);
 }
 
 void sgl_DrawTriangle(f32 x, f32 y, f32 size, SGL_COLOR color) {
-	sgl_PushInstance(x, y, size, size, 0, size / 2, size / 2, 0, SGL_SHAPE_TRIG, color);
+	sgl_PushInstance(x, y, size, size, 0, size / 2, size / 2, 0, SGL_SHAPE_TRIG, NULL, color);
 }
 
 void sgl_DrawCircle(f32 x, f32 y, f32 radius, SGL_COLOR color) {
@@ -1879,38 +1890,66 @@ void sgl_DrawCircle(f32 x, f32 y, f32 radius, SGL_COLOR color) {
 		0,
 		0,
 		SGL_SHAPE_CIRCLE,
+		NULL,
 		color
 	);
 }
 
 // 3D Object
 void sgl_DrawCube(Vec3 position, f32 size, SGL_Texture* texture, SGL_COLOR color) {
-	if (sgl.instanceCount >= SGL_MAX_INSTANCES)
-		sgl_Flush();
+	// if (sgl.instanceCount >= SGL_MAX_INSTANCES)
+	// 	sgl_Flush();
 
 	// Determine texture index: -1.0f means "no texture"
-	float texIndex = (texture != NULL) ? (float)texture->id : -1.0f;
 
 	// We reuse the existing struct.
 	// x,y,w = position, h = size.
 	// type = generic cube type (define a new enum SGL_SHAPE_CUBE = 100)
 
-	sgl.mappedPtr[sgl.instanceCount++] = (SGL_InstanceData){
-		.x = position.x,
-		.y = position.y,
-		.w = position.z, // Pos X, Y, Z
-		.h = size,		 // Size
-		.angle = 0,
-		.ox = 0,
-		.oy = 0,
-		.z = 0,			// Unused/Rotation
-		.type = 100.0f, // Magic number for CUBE in shader
-		.texIndex = texIndex,
-		.r = color.r / 255.0f,
-		.g = color.g / 255.0f,
-		.b = color.b / 255.0f,
-		.a = color.a / 255.0f,
-	};
+	// sgl_PushInstance(
+	// 	position.x,
+	// 	position.y,
+	// 	position.z,
+	// 	size,
+	// 	0.0f,
+	// 	0.0f,
+	// 	0.0f,
+	// 	0.0f,
+	// 	100.0f,
+	// 	&texture,
+	// 	color
+	// );
+
+	sgl_PushInstance(
+		position.x,
+		position.y,
+		position.z,
+		size,
+		0.0f,
+		0.0f,
+		0.0f,
+		0.0f,
+		SGL_SHAPE_CUBE,
+		texture,
+		color
+	);
+
+	// sgl.mappedPtr[sgl.instanceCount++] = (SGL_InstanceData){
+	// 	.x = position.x,
+	// 	.y = position.y,
+	// 	.w = position.z, // Pos X, Y, Z
+	// 	.h = size,		 // Size
+	// 	.angle = 0,
+	// 	.ox = 0,
+	// 	.oy = 0,
+	// 	.z = 0,			// Unused/Rotation
+	// 	.type = 100.0f, // Magic number for CUBE in shader
+	// 	.texIndex = texIndex,
+	// 	.r = color.r / 255.0f,
+	// 	.g = color.g / 255.0f,
+	// 	.b = color.b / 255.0f,
+	// 	.a = color.a / 255.0f,
+	// };
 }
 
 // Drawing mode stuff
@@ -2012,3 +2051,26 @@ void sgl_BeginMode3D(SGL_Camera3D* cam) {
 void sgl_EndMode3D(void) { sgl_Flush(); }
 
 #endif // SGL_IMPLEMENTATION
+
+/*
+------------------------------------------------------------------------------
+		-- This software is available under zlib License --
+------------------------------------------------------------------------------
+Copyright (c) 2026 Raditya Mahatma (SiputBiru)
+
+This software is provided "as-is", without any express or implied warranty. In no event
+will the authors be held liable for any damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose, including commercial
+applications, and to alter it and redistribute it freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not claim that you
+  wrote the original software. If you use this software in a product, an acknowledgment
+  in the product documentation would be appreciated but is not required.
+
+  2. Altered source versions must be plainly marked as such, and must not be misrepresented
+  as being the original software.
+
+  3. This notice may not be removed or altered from any source distribution.
+
+*/
