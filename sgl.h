@@ -1,13 +1,13 @@
 /*
-	sgl.h - Simple GPU Library for SDL3
-	Implements "Vertex Pulling" and "Big Buffer" rendering.
+	sgl.h - Simple Graphics Library for SDL3
+  single-header C99 library built on top of SDL3 that implements a vertex pulling rendering backend
+  and a modern, bindless batching approach for 2D/3D rendering.
 */
 
 #ifndef SGL_H
 #define SGL_H
 
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_surface.h>
 
 #include <math.h>
 #include <stdbool.h>
@@ -1034,7 +1034,7 @@ static void sgl_CheckResize(void) {
 
 		SDL_GPUTextureCreateInfo depthInfo = {
 			.type = SDL_GPU_TEXTURETYPE_2D,
-			.format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+			.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
 			.width = (uint32_t)w,
 			.height = (uint32_t)h,
 			.layer_count_or_depth = 1,
@@ -1480,7 +1480,7 @@ SDL_GPUGraphicsPipeline* sgl_CreatePipeline(SDL_GPUShader* vert, SDL_GPUShader* 
 		.num_color_targets = 1,
 		.color_target_descriptions = &targetDesc,
 		.has_depth_stencil_target = true,
-		.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+		.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
 	};
 
 	SDL_GPUDepthStencilState depthStencilState = {
@@ -2048,7 +2048,7 @@ void sgl_BeginMode3D(SGL_Camera3D* cam) {
 	sgl.currentMode = SGL_BATCH_3D;
 
 	float aspect = (float)sgl.winW / (float)sgl.winH;
-	SGL_Matrix proj = sgl_MatPerspective(cam->fovy, aspect, 0.01, 1000.0);
+	SGL_Matrix proj = sgl_MatPerspective(cam->fovy, aspect, 0.1, 1000.0);
 	SGL_Matrix view = sgl_MatLookAt(cam->position, cam->target, cam->up);
 
 	sgl.currentMatrix = sgl_MatMultiply(proj, view);
