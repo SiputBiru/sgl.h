@@ -5,6 +5,12 @@
 - **Planned:** 3D Primitive Rendering (Sphere, Cylinder)
 - **Planned:** Source Rectangle Support (Sprite Sheets)
 
+### [2026-02-23] - Bindless Textures & VRAM Management
+
+#### Added
+
+- **Added backface culling**: `SDL_GPURasterizerState rasterState` to determine the front face `SDL_GPU_FRONTFACE_CLOCKWISE`.
+
 ### [2026-02-22] - Bindless Textures & VRAM Management
 
 #### Added
