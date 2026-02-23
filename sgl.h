@@ -1404,8 +1404,6 @@ void sgl_DrawTexture(SGL_Texture* texture, f32 x, f32 y, f32 w, f32 h, SGL_COLOR
 		return;
 
 	sgl_PushInstance(x, y, w, h, 0, 0, 0, 0.0f, SGL_SHAPE_RECT, texture, tint);
-
-	// sgl.mappedPtr[sgl.instanceCount - 1].texIndex = (f32)texture->id;
 }
 
 // --- Shader API ---
@@ -1663,9 +1661,6 @@ void sgl_Camera3DUpdate(SGL_Camera3D* cam, SGL_CAMERA_MODE mode, f32 deltaTime) 
 		yaw += mouseX * MOUSE_SENSITIVITY;
 		pitch -= mouseY * MOUSE_SENSITIVITY;
 
-		// yaw -= mouseX * MOUSE_SENSITIVITY;
-		// pitch += mouseY * MOUSE_SENSITIVITY;
-
 		// Clamp Pitch
 		if (pitch > 1.55f)
 			pitch = 1.55f;
@@ -1903,29 +1898,6 @@ void sgl_DrawCircle(f32 x, f32 y, f32 radius, SGL_COLOR color) {
 
 // 3D Object
 void sgl_DrawCube(Vec3 position, f32 size, SGL_Texture* texture, SGL_COLOR color) {
-	// if (sgl.instanceCount >= SGL_MAX_INSTANCES)
-	// 	sgl_Flush();
-
-	// Determine texture index: -1.0f means "no texture"
-
-	// We reuse the existing struct.
-	// x,y,w = position, h = size.
-	// type = generic cube type (define a new enum SGL_SHAPE_CUBE = 100)
-
-	// sgl_PushInstance(
-	// 	position.x,
-	// 	position.y,
-	// 	position.z,
-	// 	size,
-	// 	0.0f,
-	// 	0.0f,
-	// 	0.0f,
-	// 	0.0f,
-	// 	100.0f,
-	// 	&texture,
-	// 	color
-	// );
-
 	sgl_PushInstance(
 		position.x,
 		position.y,
@@ -1939,23 +1911,6 @@ void sgl_DrawCube(Vec3 position, f32 size, SGL_Texture* texture, SGL_COLOR color
 		texture,
 		color
 	);
-
-	// sgl.mappedPtr[sgl.instanceCount++] = (SGL_InstanceData){
-	// 	.x = position.x,
-	// 	.y = position.y,
-	// 	.w = position.z, // Pos X, Y, Z
-	// 	.h = size,		 // Size
-	// 	.angle = 0,
-	// 	.ox = 0,
-	// 	.oy = 0,
-	// 	.z = 0,			// Unused/Rotation
-	// 	.type = 100.0f, // Magic number for CUBE in shader
-	// 	.texIndex = texIndex,
-	// 	.r = color.r / 255.0f,
-	// 	.g = color.g / 255.0f,
-	// 	.b = color.b / 255.0f,
-	// 	.a = color.a / 255.0f,
-	// };
 }
 
 // Drawing mode stuff
