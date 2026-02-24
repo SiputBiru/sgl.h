@@ -1079,7 +1079,7 @@ static SDL_GPUShader* sgl_CreateShaderFromBytes(
 	SDL_GPUShader* shaderCreate = SDL_CreateGPUShader(sgl.device, &shaderInfo);
 
 	if (!shaderCreate) {
-		SGL_Error("Not a Valid ShaderInfo! INFO: ", SDL_GetError());
+		SGL_Error("Not a Valid ShaderInfo! INFO: %s", SDL_GetError());
 	}
 
 	return shaderCreate;
@@ -1542,6 +1542,7 @@ SDL_GPUGraphicsPipeline* sgl_CreatePipeline(SDL_GPUShader* vert, SDL_GPUShader* 
 		.vertex_shader = vert,
 		.fragment_shader = frag,
 		.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+		.rasterizer_state = rasterState,
 		.depth_stencil_state = depthStencilState,
 		.target_info = targetInfo,
 	};
@@ -1568,6 +1569,7 @@ void sgl_SetCamera(SGL_Camera* cam) {
 	} else {
 		sgl.camera = (SGL_Camera){
 			0.0f,
+			1.0f,
 			1.0f,
 		};
 	}
@@ -1676,7 +1678,7 @@ void sgl_Camera3DUpdate(SGL_Camera3D* cam, SGL_CAMERA_MODE mode, f32 deltaTime) 
 
 		if (mode == CAMERA_ORBITAL) {
 		const f32 PAN_SPEED = 5.0f * deltaTime;
-		const f32 ZOOM_SPEED = 0.5f;
+		// const f32 ZOOM_SPEED = 0.5f;
 
 		// Calculate Direction
 		Vec3 dir = sgl_Vec3Sub(cam->position, cam->target);
