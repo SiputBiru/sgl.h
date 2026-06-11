@@ -31,16 +31,16 @@ typedef double f64;
 #define SGL_MAX_TEXTURE_SLOTS 8
 
 typedef struct {
-	uint8_t r, g, b, a;
-} SGL_COLOR;
-
-typedef struct {
 	f32 x, y;
 } Vec2;
 
 typedef struct {
 	f32 x, y, z;
 } Vec3;
+
+typedef struct {
+	uint8_t r, g, b, a;
+} SGL_COLOR;
 
 typedef struct {
 	float m[16];
@@ -91,6 +91,15 @@ typedef struct {
 	f32 height;
 } SGL_Texture;
 
+// text rendering test
+#ifdef STB_TRUETYPE
+typedef struct {
+	SGL_TEXTURE* texture;
+	stbbtt_bakedchar cdata[96];
+	f32 size;
+} SGL_Font;
+#endif // STB_TRUETYPE
+
 // -- API --
 void sgl_InitWindow(int w, int h, const char* title);
 void sgl_Shutdown(void);
@@ -98,7 +107,7 @@ void sgl_Shutdown(void);
 // Texture API
 SGL_Texture* sgl_CreateTexture(void* pixels, int width, int height);
 SGL_Texture* sgl_LoadTexture(const char* filename); // Uses SDL_LoadBMP
-SGL_Texture* sgl_loadTextureIO(const uint8_t* data, size_t size);
+SGL_Texture* sgl_LoadTextureIO(const uint8_t* data, size_t size);
 void sgl_DestroyTexture(SGL_Texture* texture);
 void sgl_DrawTexture(SGL_Texture* texture, f32 x, f32 y, f32 w, f32 h, SGL_COLOR tint);
 
@@ -236,7 +245,7 @@ static struct {
 } sgl;
 
 // Window Loop
-bool sgl_WindowShouldClose() {
+bool sgl_WindowShouldClose(void) {
 	if (sgl.shouldClose) {
 		return true;
 	}
@@ -826,7 +835,7 @@ static f32 sgl_q_rsqrt(f32 num) {
 	i = 0x5f3759df - (i >> 1); // what the...
 	y = *(f32*)&i;
 	y = y * (threehalfs - (x2 * y * y)); // 1st iteration
-	y = y * (threehalfs - (x2 * y * y)); // 2st iteration can be removed
+	y = y * (threehalfs - (x2 * y * y)); // 2nd iteration can be removed
 
 	return y;
 }
@@ -839,7 +848,7 @@ static f32 sgl_sqrt(f32 num) {
 
 static inline f32 sgl_Vec3LengthSquared(Vec3 v) { return (v.x * v.x) + (v.y * v.y) + (v.z * v.z); }
 
-static f32 sgl_Vec3length(Vec3 v) {
+static f32 sgl_Vec3Length(Vec3 v) {
 	f32 ls = sgl_Vec3LengthSquared(v);
 
 	if (ls == 0) {
@@ -850,7 +859,7 @@ static f32 sgl_Vec3length(Vec3 v) {
 }
 
 static Vec3 sgl_Vec3Normalize(Vec3 v) {
-	f32 len = sgl_Vec3length(v);
+	f32 len = sgl_Vec3Length(v);
 	if (len == 0) {
 		return (Vec3){ 0, 0, 0 };
 	}
@@ -870,7 +879,7 @@ static Vec3 sgl_Vec3Cross(Vec3 v1, Vec3 v2) {
 	};
 }
 
-static SGL_Matrix sgl_MatIndentity(void) {
+static SGL_Matrix sgl_MatIdentity(void) {
 	SGL_Matrix result = { 0 };
 	result.m[0] = 1.0f;
 	result.m[5] = 1.0f;
@@ -1075,14 +1084,14 @@ static SDL_GPUShader* sgl_CreateShaderFromBytes(
 		.num_uniform_buffers = (Uint32)num_uniform,
 	};
 
-	// ttying
-	SDL_GPUShader* shaderCreate = SDL_CreateGPUShader(sgl.device, &shaderInfo);
+	// trying
+	SDL_GPUShader* shader = SDL_CreateGPUShader(sgl.device, &shaderInfo);
 
-	if (!shaderCreate) {
+	if (!shader) {
 		SGL_Error("Not a Valid ShaderInfo! INFO: %s", SDL_GetError());
 	}
 
-	return shaderCreate;
+	return shader;
 }
 
 // internal flush
@@ -1183,7 +1192,7 @@ static void sgl_PushInstance(
 	}
 
 	if (!sgl.mappedPtr) {
-		SGL_Error("preventing writing to NULL cause flush is failed %s", SDL_GetError());
+		SGL_Error("Prevented writing to NULL pointer; Flush failed: %s", SDL_GetError());
 		return;
 	}
 
@@ -1387,7 +1396,7 @@ SGL_Texture* sgl_CreateTexture(void* pixels, int width, int height) {
 	return wrapper;
 }
 
-SGL_Texture* sgl_loadTextureIO(const uint8_t* data, size_t size) {
+SGL_Texture* sgl_LoadTextureIO(const uint8_t* data, size_t size) {
 	SDL_IOStream* io = SDL_IOFromConstMem(data, size);
 	if (!io) {
 		SGL_Error("Failed to create IOStream: %s", SDL_GetError());
@@ -1614,9 +1623,9 @@ void sgl_Camera3DUpdate(SGL_Camera3D* cam, SGL_CAMERA_MODE mode, f32 deltaTime) 
 	SDL_GetRelativeMouseState(&mouseX, &mouseY);
 
 	if (mode == CAMERA_FREE) {
-		// Calculte direction vector (Target - Position)
+		// Calculate direction vector (Target - Position)
 		Vec3 forward = sgl_Vec3Sub(cam->target, cam->position);
-		f32 dist = sgl_Vec3length(forward);
+		f32 dist = sgl_Vec3Length(forward);
 		forward = sgl_Vec3Normalize(forward);
 
 		// Calculate Yaw and Pitch
@@ -1678,11 +1687,10 @@ void sgl_Camera3DUpdate(SGL_Camera3D* cam, SGL_CAMERA_MODE mode, f32 deltaTime) 
 
 		if (mode == CAMERA_ORBITAL) {
 		const f32 PAN_SPEED = 5.0f * deltaTime;
-		// const f32 ZOOM_SPEED = 0.5f;
 
 		// Calculate Direction
 		Vec3 dir = sgl_Vec3Sub(cam->position, cam->target);
-		f32 dist = sgl_Vec3length(dir);
+		f32 dist = sgl_Vec3Length(dir);
 		dir = sgl_Vec3Normalize(dir);
 
 		// Mouse Scroll
@@ -1858,13 +1866,12 @@ void sgl_InitWindow(int w, int h, const char* title) {
 	// INFO: Initialize GPU with standard SPIR-V format support, this makes SDL3 will be using
 	// Vulkan By default
 
-	// SDL_GPUDevice* dev = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
 	SDL_GPUDevice* dev = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, ENABLE_GPU_DEBUG, NULL);
 
 	sgl_InternalInit(win, dev);
 }
 
-void sgl_Shutdown() {
+void sgl_Shutdown(void) {
 	if (sgl.instanceBuffer)
 		SDL_ReleaseGPUBuffer(sgl.device, sgl.instanceBuffer);
 	if (sgl.transferBuffer)
@@ -1890,7 +1897,7 @@ void sgl_Shutdown() {
 	SDL_DestroyGPUDevice(sgl.device);
 	SDL_DestroyWindow(sgl.window);
 	SDL_Quit();
-	SGL_Log("Shutdowning gracefully..");
+	SGL_Log("Shutting down gracefully..");
 }
 
 // --- Pipeline Switching ---
@@ -2007,7 +2014,7 @@ void sgl_BeginDrawing(void) {
 	}
 }
 
-void sgl_EndDrawing() {
+void sgl_EndDrawing(void) {
 	if (sgl.instanceCount > 0)
 		sgl_Flush();
 	SDL_SubmitGPUCommandBuffer(sgl.curCmd);
@@ -2026,10 +2033,10 @@ void sgl_BeginMode2D(SGL_Camera* camera) {
 	SGL_Matrix ortho = sgl_MatOrtho(0, w, h, 0, -100, 100);
 	// Apply camera transform here if desired (translate/scale mat)
 	if (camera) {
-		SGL_Matrix view = sgl_MatIndentity();
+		SGL_Matrix view = sgl_MatIdentity();
 
 		f32 half_w = w / 2.0f;
-		f32 half_h = w / 2.0f;
+		f32 half_h = h / 2.0f;
 
 		view.m[0] = camera->zoom;
 		view.m[5] = camera->zoom;

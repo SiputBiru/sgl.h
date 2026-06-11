@@ -251,8 +251,9 @@ now `sgl` will reports:
 - **Graphics Backend**: (e.g., Vulkan, Metal, Direct3D12). but mainly will outputing vulkan cause of the SPIRV assignment in the gpu create device.
 
 ```C
+    // ENABLE_GPU_DEBUG is true in debug builds, false in release
     SDL_GPUDevice *dev =
-        SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
+        SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, ENABLE_GPU_DEBUG, NULL);
 ```
 
 - **Shader Details**: How many Uniform and Storage Buffers are active per shader.
